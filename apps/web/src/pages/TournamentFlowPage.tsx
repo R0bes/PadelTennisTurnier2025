@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import { Trophy, Users, GitBranch, Zap } from 'lucide-react';
-import { simpleSwissPairing } from '@tournament-app/shared-utils';
-import type { Phase, TournamentState } from '@tournament-app/shared-types';
+import { useMemo } from 'react';
+import { Trophy, GitBranch, Zap } from 'lucide-react';
+import type { Phase, TournamentState, Team } from '@tournament-app/shared-types';
 
 interface TournamentFlowPageProps {
   tournamentState: TournamentState;
@@ -16,49 +15,110 @@ const phases: Phase[] = [
   'summary',
 ];
 
-const swissRounds = [
-  {
-    round: 1,
-    matches: [
-      { id: 'm1', player1: 'Alice Johnson', player2: 'Bob Smith', score: '2-1' },
-      { id: 'm2', player1: 'Charlie Brown', player2: 'Diana Prince', score: '1-2' },
-      { id: 'm3', player1: 'Eve Wilson', player2: 'Frank Miller', score: '2-0' },
-    ],
-  },
-  {
-    round: 2,
-    matches: [
-      { id: 'm4', player1: 'Alice Johnson', player2: 'Diana Prince', score: '2-1' },
-      { id: 'm5', player1: 'Bob Smith', player2: 'Eve Wilson', score: '0-2' },
-      { id: 'm6', player1: 'Charlie Brown', player2: 'Frank Miller', score: '1-2' },
-    ],
-  },
-  {
-    round: 3,
-    matches: [
-      { id: 'm7', player1: 'Alice Johnson', player2: 'Eve Wilson', score: '2-0' },
-      { id: 'm8', player1: 'Diana Prince', player2: 'Frank Miller', score: '1-2' },
-      { id: 'm9', player1: 'Bob Smith', player2: 'Charlie Brown', score: '2-1' },
-    ],
-  },
-];
+// Generate round-robin pairings for teams
+function generateTeamPairings(teams: Team[]): Array<[Team, Team]> {
+  const pairs: Array<[Team, Team]> = [];
+  const shuffled = [...teams].sort(() => Math.random() - 0.5);
+  
+  // If odd number of teams, one team gets a bye
+  for (let i = 0; i < shuffled.length; i += 2) {
+    if (i + 1 < shuffled.length) {
+      pairs.push([shuffled[i], shuffled[i + 1]]);
+    }
+  }
+  
+  return pairs;
+}
+
+// Generate KO bracket structure (Quarterfinals → Semifinals → Final only)
+function generateKOBracket(teams: Team[]) {
+  const numTeams = teams.length;
+  if (numTeams < 2) return null;
+  
+  // Only support brackets with 4, 8 teams (Quarterfinals start)
+  // If more teams, take top 8; if less, fill with byes
+  let bracketSize = 8;
+  if (numTeams < 4) {
+    bracketSize = 4;
+  }
+  
+  // Seed teams (top teams, fill with byes if needed)
+  const seededTeams = [...teams].slice(0, bracketSize);
+  while (seededTeams.length < bracketSize) {
+    seededTeams.push(null); // Bye
+  }
+  
+  // Build bracket rounds: Quarterfinals → Semifinals → Final
+  const rounds: Array<{ round: string; matches: Array<{ team1: Team | null; team2: Team | null; winner?: Team | null }> }> = [];
+  let currentRound = seededTeams;
+  
+  // Quarterfinals (8 teams → 4 winners)
+  if (currentRound.length === 8) {
+    const matches: Array<{ team1: Team | null; team2: Team | null; winner?: Team | null }> = [];
+    const semifinalists: (Team | null)[] = [];
+    
+    for (let i = 0; i < currentRound.length; i += 2) {
+      const team1 = currentRound[i];
+      const team2 = currentRound[i + 1];
+      matches.push({ team1, team2 });
+      // Winner advances (placeholder)
+      semifinalists.push(team1 || team2);
+    }
+    
+    rounds.push({ round: 'Quarterfinals', matches });
+    currentRound = semifinalists;
+  }
+  
+  // Semifinals (4 teams → 2 winners)
+  if (currentRound.length === 4) {
+    const matches: Array<{ team1: Team | null; team2: Team | null; winner?: Team | null }> = [];
+    const finalists: (Team | null)[] = [];
+    
+    for (let i = 0; i < currentRound.length; i += 2) {
+      const team1 = currentRound[i];
+      const team2 = currentRound[i + 1];
+      matches.push({ team1, team2 });
+      // Winner advances (placeholder)
+      finalists.push(team1 || team2);
+    }
+    
+    rounds.push({ round: 'Semifinals', matches });
+    currentRound = finalists;
+  }
+  
+  // Final (2 teams → 1 winner)
+  if (currentRound.length === 2) {
+    const matches: Array<{ team1: Team | null; team2: Team | null; winner?: Team | null }> = [
+      { team1: currentRound[0], team2: currentRound[1] }
+    ];
+    rounds.push({ round: 'Final', matches });
+  }
+  
+  return rounds;
+}
 
 export default function TournamentFlowPage({
   tournamentState,
   isAdmin,
 }: TournamentFlowPageProps) {
-  const [pairings, setPairings] = useState<Array<[typeof tournamentState.players[0], typeof tournamentState.players[0]]>>([]);
-
-  const generatePairings = () => {
-    if (tournamentState.players.length >= 2) {
-      const pairs = simpleSwissPairing(tournamentState.players);
-      setPairings(pairs);
-    }
-  };
-
+  const teams = tournamentState.teams || [];
   const currentPhaseIndex = phases.indexOf(tournamentState.phase);
-  const isSwissPhase = tournamentState.phase === 'swiss_rounds';
-  const isKoPhase = tournamentState.phase === 'ko_bracket';
+
+  // Generate Swiss rounds automatically (always 3 rounds)
+  const swissMatches = useMemo(() => {
+    if (teams.length < 2) return {};
+    
+    const allRounds: Record<number, Array<{ team1: Team; team2: Team; score?: string }>> = {};
+    // Generate exactly 3 rounds for Swiss system
+    for (let round = 1; round <= 3; round++) {
+      const pairs = generateTeamPairings(teams);
+      allRounds[round] = pairs.map(([team1, team2]) => ({ team1, team2 }));
+    }
+    return allRounds;
+  }, [teams]);
+
+  // KO Bracket
+  const koBracket = useMemo(() => generateKOBracket(teams), [teams]);
 
   return (
     <div className="space-y-8">
@@ -108,137 +168,206 @@ export default function TournamentFlowPage({
         </div>
       </div>
 
-      {/* Swiss Rounds */}
-      {isSwissPhase && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-              <Zap className="w-5 h-5" />
-              Swiss Rounds
-            </h2>
-            {tournamentState.players.length >= 2 && (
-              <button
-                onClick={generatePairings}
-                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-all font-medium text-sm shadow-sm hover:shadow"
-              >
-                <Zap className="w-4 h-4" />
-                Generate Pairings
-              </button>
-            )}
+      {/* Tournament Matches - Swiss Rounds & KO Bracket */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+            <Zap className="w-5 h-5" />
+            Tournament Matches
+          </h2>
+        </div>
+
+        {teams.length < 2 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+            <p className="text-yellow-800 text-sm">
+              Need at least 2 teams to generate pairings.
+            </p>
           </div>
+        )}
 
-          {pairings.length > 0 && (
-            <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
-              <h3 className="font-semibold text-green-800 mb-2">
-                Generated Pairings (using shared-utils):
-              </h3>
-              <ul className="space-y-1">
-                {pairings.map(([p1, p2], idx) => (
-                  <li key={idx} className="text-sm text-green-700">
-                    {p1.name} vs {p2.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
 
-          {tournamentState.players.length < 2 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <p className="text-yellow-800 text-sm">
-                Need at least 2 players to generate pairings.
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-6">
-            {swissRounds.map((round) => (
-              <div key={round.round}>
-                <h3 className="text-lg font-semibold text-gray-700 mb-3">
-                  Round {round.round}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {round.matches.map((match) => (
-                    <div
-                      key={match.id}
-                      className="bg-gray-50 rounded-lg p-4 border border-gray-200"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-gray-800">
-                            {match.player1}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">vs</div>
-                          <div className="text-sm font-medium text-gray-800">
-                            {match.player2}
+        {/* Swiss Rounds */}
+        {teams.length >= 2 && Object.keys(swissMatches).length > 0 && (
+          <div className="mb-8 pb-8 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              Swiss Rounds
+            </h3>
+            <div className="space-y-6">
+              {Object.entries(swissMatches)
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .map(([roundNum, matches]) => (
+                  <div key={roundNum} className="bg-gradient-to-br from-green-50 to-white rounded-lg p-4 border border-green-200">
+                    <h4 className="text-md font-semibold text-gray-700 mb-3">
+                      Round {roundNum}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {matches.map((match, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-white rounded-xl p-6 border-2 border-gray-300 hover:border-green-500 hover:shadow-xl transition-all shadow-lg"
+                        >
+                          <div className="space-y-4">
+                            {/* Team 1 Card */}
+                            <div className="bg-gradient-to-br from-green-50 to-white rounded-lg p-4 border-2 border-green-200 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0 shadow-md">
+                                  <span className="text-white font-bold text-sm">1</span>
+                                </div>
+                                <div className="flex-1">
+                                  <span className="text-base font-bold text-gray-900">
+                                    {match.team1.name}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* VS Divider */}
+                            <div className="flex items-center justify-center py-2">
+                              <div className="flex-1 border-t-2 border-gray-300"></div>
+                              <span className="px-4 text-sm font-bold text-gray-500 uppercase tracking-widest">vs</span>
+                              <div className="flex-1 border-t-2 border-gray-300"></div>
+                            </div>
+                            
+                            {/* Team 2 Card */}
+                            <div className="bg-gradient-to-br from-blue-50 to-white rounded-lg p-4 border-2 border-blue-200 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 shadow-md">
+                                  <span className="text-white font-bold text-sm">2</span>
+                                </div>
+                                <div className="flex-1">
+                                  <span className="text-base font-bold text-gray-900">
+                                    {match.team2.name}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Score */}
+                            {match.score && (
+                              <div className="pt-3 border-t-2 border-gray-300">
+                                <div className="text-center">
+                                  <span className="text-2xl font-bold text-green-600">
+                                    {match.score}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="text-lg font-bold text-blue-600 ml-4">
-                          {match.score}
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* KO Bracket */}
+        {koBracket && (
+          <div className="bg-gradient-to-br from-blue-50 to-white rounded-lg p-4 border border-blue-200">
+            <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              <Trophy className="w-4 h-4" />
+              Knockout Bracket
+            </h3>
+            <div className="space-y-6">
+              {koBracket.map((round, roundIdx) => (
+                <div key={roundIdx}>
+                  <h4 className="text-md font-semibold text-gray-700 mb-3">
+                    {round.round}
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    {round.matches.map((match, matchIdx) => (
+                      <div
+                        key={matchIdx}
+                        className="bg-white rounded-xl p-6 border-2 border-blue-300 shadow-lg hover:border-blue-500 hover:shadow-xl transition-all"
+                      >
+                        <div className="space-y-4">
+                          {/* Team 1 Card */}
+                          <div
+                            className={`rounded-lg p-4 border-2 shadow-md transition-all ${
+                              match.winner === match.team1
+                                ? 'bg-gradient-to-br from-green-100 to-green-50 border-green-400 shadow-green-200'
+                                : match.team1
+                                ? 'bg-gradient-to-br from-purple-50 to-white border-purple-200 hover:shadow-lg'
+                                : 'bg-gray-100 border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-md ${
+                                match.winner === match.team1
+                                  ? 'bg-green-500'
+                                  : match.team1
+                                  ? 'bg-purple-500'
+                                  : 'bg-gray-400'
+                              }`}>
+                                <span className={`font-bold text-sm ${
+                                  match.winner === match.team1 || match.team1
+                                    ? 'text-white'
+                                    : 'text-gray-600'
+                                }`}>
+                                  1
+                                </span>
+                              </div>
+                              <div className="flex-1">
+                                <span className={`text-base font-bold ${
+                                  match.team1 ? 'text-gray-900' : 'text-gray-500 italic'
+                                }`}>
+                                  {match.team1?.name || 'Bye'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* VS Divider */}
+                          <div className="flex items-center justify-center py-2">
+                            <div className="flex-1 border-t-2 border-gray-300"></div>
+                            <span className="px-4 text-sm font-bold text-gray-500 uppercase tracking-widest">vs</span>
+                            <div className="flex-1 border-t-2 border-gray-300"></div>
+                          </div>
+                          
+                          {/* Team 2 Card */}
+                          <div
+                            className={`rounded-lg p-4 border-2 shadow-md transition-all ${
+                              match.winner === match.team2
+                                ? 'bg-gradient-to-br from-green-100 to-green-50 border-green-400 shadow-green-200'
+                                : match.team2
+                                ? 'bg-gradient-to-br from-purple-50 to-white border-purple-200 hover:shadow-lg'
+                                : 'bg-gray-100 border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-md ${
+                                match.winner === match.team2
+                                  ? 'bg-green-500'
+                                  : match.team2
+                                  ? 'bg-purple-500'
+                                  : 'bg-gray-400'
+                              }`}>
+                                <span className={`font-bold text-sm ${
+                                  match.winner === match.team2 || match.team2
+                                    ? 'text-white'
+                                    : 'text-gray-600'
+                                }`}>
+                                  2
+                                </span>
+                              </div>
+                              <div className="flex-1">
+                                <span className={`text-base font-bold ${
+                                  match.team2 ? 'text-gray-900' : 'text-gray-500 italic'
+                                }`}>
+                                  {match.team2?.name || 'Bye'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* KO Bracket */}
-      {isKoPhase && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Knockout Bracket
-          </h2>
-          <div className="bg-gray-50 rounded-lg p-8 border-2 border-dashed border-gray-300 text-center">
-            <p className="text-gray-500">
-              KO Bracket visualization will be implemented here
-            </p>
-            <div className="mt-4 text-sm text-gray-400">
-              (Quarterfinals → Semifinals → Final)
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!isSwissPhase && !isKoPhase && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-500 text-center py-8">
-            Tournament flow content will appear when the tournament reaches the
-            Swiss rounds or KO bracket phase.
-          </p>
-        </div>
-      )}
-
-      {/* Players List - Always visible in Public View */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5" />
-          Registered Players ({tournamentState.players.length})
-        </h2>
-        {tournamentState.players.length === 0 ? (
-          <div className="text-center py-12">
-            <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No players registered yet.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {tournamentState.players.map((player) => (
-              <div
-                key={player.id}
-                className="bg-gradient-to-br from-gray-50 to-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <span className="text-blue-600 font-semibold text-sm">
-                      {player.name.charAt(0).toUpperCase()}
-                    </span>
+                    ))}
                   </div>
-                  <span className="text-gray-800 font-medium">{player.name}</span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>
