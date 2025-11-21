@@ -16,6 +16,7 @@ model Tournament {
   phase     String   @default("registration")
   createdAt DateTime @default(now())
   players   Player[]
+  teams     Team[]
 }
 
 model Player {
@@ -23,5 +24,16 @@ model Player {
   name         String
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
   tournamentId String
+  teamId       String?
+  team         Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+}
+
+model Team {
+  id           String   @id @default(cuid())
+  name         String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String
+  players      Player[]
+  createdAt    DateTime @default(now())
 }
 

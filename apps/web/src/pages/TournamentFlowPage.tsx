@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trophy, Users, GitBranch, Zap } from 'lucide-react';
 import { simpleSwissPairing } from '@tournament-app/shared-utils';
 import type { Phase, TournamentState } from '@tournament-app/shared-types';
 
@@ -62,7 +63,10 @@ export default function TournamentFlowPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Tournament Flow</h1>
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+          <Trophy className="w-8 h-8" />
+          Tournament Flow
+        </h1>
         <p className="mt-2 text-gray-600">
           View the tournament progression through different phases. Current
           phase: <strong>{tournamentState.phase.replace('_', ' ')}</strong>
@@ -70,8 +74,9 @@ export default function TournamentFlowPage({
       </div>
 
       {/* Phase Timeline */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
+          <GitBranch className="w-5 h-5" />
           Tournament Phases
         </h2>
         <div className="flex items-center justify-between">
@@ -105,17 +110,19 @@ export default function TournamentFlowPage({
 
       {/* Swiss Rounds */}
       {isSwissPhase && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+              <Zap className="w-5 h-5" />
               Swiss Rounds
             </h2>
             {tournamentState.players.length >= 2 && (
               <button
                 onClick={generatePairings}
-                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors font-medium text-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-all font-medium text-sm shadow-sm hover:shadow"
               >
-                Generate Demo Pairings
+                <Zap className="w-4 h-4" />
+                Generate Pairings
               </button>
             )}
           </div>
@@ -206,21 +213,30 @@ export default function TournamentFlowPage({
 
       {/* Players List - Always visible in Public View */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+          <Users className="w-5 h-5" />
           Registered Players ({tournamentState.players.length})
         </h2>
         {tournamentState.players.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">
-            No players registered yet.
-          </p>
+          <div className="text-center py-12">
+            <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">No players registered yet.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {tournamentState.players.map((player) => (
               <div
                 key={player.id}
-                className="bg-gray-50 p-3 rounded-md border border-gray-200"
+                className="bg-gradient-to-br from-gray-50 to-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all"
               >
-                <span className="text-gray-800 font-medium">{player.name}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-blue-600 font-semibold text-sm">
+                      {player.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <span className="text-gray-800 font-medium">{player.name}</span>
+                </div>
               </div>
             ))}
           </div>

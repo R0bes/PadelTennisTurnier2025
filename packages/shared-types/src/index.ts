@@ -26,12 +26,22 @@ export const TournamentSchema = z.object({
 
 export type Tournament = z.infer<typeof TournamentSchema>;
 
+export const TeamSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  tournamentId: z.string(),
+  playerIds: z.array(z.string()),
+  createdAt: z.string(),
+});
+export type Team = z.infer<typeof TeamSchema>;
+
 export const TournamentStateSchema = z.object({
   id: z.string(),
   name: z.string(),
   phase: PhaseSchema,
   createdAt: z.string(),
   players: z.array(PlayerSchema),
+  teams: z.array(TeamSchema).optional(),
   rounds: z.array(z.unknown()).optional(),
 });
 

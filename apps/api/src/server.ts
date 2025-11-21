@@ -6,6 +6,7 @@ import {
   PlayerSchema,
   PhaseSchema,
   TournamentStateSchema,
+  TeamSchema,
   type Phase,
 } from '@tournament-app/shared-types';
 
@@ -75,14 +76,34 @@ fastify.post<{ Body: { name: string } }>('/tournaments', async (request, reply) 
       }
     }
 
+    // Fetch tournament with teams
+    const tournamentWithTeams = await prisma.tournament.findUnique({
+      where: { id: tournament.id },
+      include: {
+        players: true,
+        teams: {
+          include: {
+            players: true,
+          },
+        },
+      },
+    });
+
     const result = {
-      id: tournament.id,
-      name: tournament.name,
-      phase: (tournament.phase || 'registration') as Phase,
-      createdAt: tournament.createdAt.toISOString(),
-      players: tournament.players.map((player) => ({
+      id: tournamentWithTeams!.id,
+      name: tournamentWithTeams!.name,
+      phase: (tournamentWithTeams!.phase || 'registration') as Phase,
+      createdAt: tournamentWithTeams!.createdAt.toISOString(),
+      players: tournamentWithTeams!.players.map((player) => ({
         id: player.id,
         name: player.name,
+      })),
+      teams: tournamentWithTeams!.teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        tournamentId: team.tournamentId,
+        playerIds: team.players.map((p) => p.id),
+        createdAt: team.createdAt.toISOString(),
       })),
       rounds: [],
     };
@@ -145,7 +166,16 @@ fastify.get<{ Params: { id: string } }>(
       const tournament = await prisma.tournament.findUnique({
         where: { id },
         include: {
-          players: true,
+          players: {
+            include: {
+              team: true,
+            },
+          },
+          teams: {
+            include: {
+              players: true,
+            },
+          },
         },
       });
 
@@ -161,6 +191,13 @@ fastify.get<{ Params: { id: string } }>(
         players: tournament.players.map((player) => ({
           id: player.id,
           name: player.name,
+        })),
+        teams: tournament.teams.map((team) => ({
+          id: team.id,
+          name: team.name,
+          tournamentId: team.tournamentId,
+          playerIds: team.players.map((p) => p.id),
+          createdAt: team.createdAt.toISOString(),
         })),
         rounds: [], // Placeholder for future rounds
       };
@@ -219,7 +256,16 @@ fastify.post<{ Params: { id: string }; Body: { phase: Phase } }>(
       where: { id },
       data: { phase },
       include: {
-        players: true,
+        players: {
+          include: {
+            team: true,
+          },
+        },
+        teams: {
+          include: {
+            players: true,
+          },
+        },
       },
     });
 
@@ -231,6 +277,13 @@ fastify.post<{ Params: { id: string }; Body: { phase: Phase } }>(
       players: updated.players.map((player) => ({
         id: player.id,
         name: player.name,
+      })),
+      teams: updated.teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        tournamentId: team.tournamentId,
+        playerIds: team.players.map((p) => p.id),
+        createdAt: team.createdAt.toISOString(),
       })),
       rounds: [],
     };
@@ -246,11 +299,239 @@ fastify.post<{ Params: { id: string }; Body: { phase: Phase } }>(
 fastify.post<{ Params: { id: string }; Body: { name: string } }>(
   '/tournaments/:id/register-player',
   async (request, reply) => {
-    const { id } = request.params;
-    const { name } = request.body;
+    try {
+      const { id } = request.params;
+      const { name } = request.body;
 
-    if (!name || typeof name !== 'string') {
-      return reply.code(400).send({ error: 'Name is required' });
+      if (!name || typeof name !== 'string') {
+        return reply.code(400).send({ error: 'Name is required' });
+      }
+
+      // Check if tournament exists
+      const tournament = await prisma.tournament.findUnique({
+        where: { id },
+      });
+
+      if (!tournament) {
+        return reply.code(404).send({ error: 'Tournament not found' });
+      }
+
+      const player = await prisma.player.create({
+        data: {
+          name,
+          tournamentId: id,
+        },
+      });
+
+      const result = {
+        id: player.id,
+        name: player.name,
+        tournamentId: player.tournamentId,
+      };
+
+      // Validate player data with shared schema (only id and name)
+      PlayerSchema.parse({ id: player.id, name: player.name });
+
+      return result;
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+);
+
+// Delete player
+fastify.delete<{ Params: { id: string; playerId: string } }>(
+  '/tournaments/:id/players/:playerId',
+  async (request, reply) => {
+    try {
+      const { id, playerId } = request.params;
+
+      // Check if tournament exists
+      const tournament = await prisma.tournament.findUnique({
+        where: { id },
+      });
+
+      if (!tournament) {
+        return reply.code(404).send({ error: 'Tournament not found' });
+      }
+
+      // Check if player exists and belongs to tournament
+      const player = await prisma.player.findUnique({
+        where: { id: playerId },
+      });
+
+      if (!player) {
+        return reply.code(404).send({ error: 'Player not found' });
+      }
+
+      if (player.tournamentId !== id) {
+        return reply.code(400).send({
+          error: 'Player does not belong to this tournament',
+        });
+      }
+
+      await prisma.player.delete({
+        where: { id: playerId },
+      });
+
+      return reply.code(204).send();
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+);
+
+// Create team
+fastify.post<{ Params: { id: string }; Body: { name: string } }>(
+  '/tournaments/:id/teams',
+  async (request, reply) => {
+    try {
+      const { id } = request.params;
+      const { name } = request.body;
+
+      if (!name || typeof name !== 'string') {
+        return reply.code(400).send({ error: 'Team name is required' });
+      }
+
+      // Check if tournament exists
+      const tournament = await prisma.tournament.findUnique({
+        where: { id },
+      });
+
+      if (!tournament) {
+        return reply.code(404).send({ error: 'Tournament not found' });
+      }
+
+      const team = await prisma.team.create({
+        data: {
+          name,
+          tournamentId: id,
+        },
+        include: {
+          players: true,
+        },
+      });
+
+      // Get unassigned real players (excluding DummyPlayers)
+      const unassignedRealPlayers = await prisma.player.findMany({
+        where: {
+          tournamentId: id,
+          teamId: null,
+          name: { not: 'DummyPlayer' },
+        },
+      });
+
+      // Only create DummyPlayers if there are no unassigned real players available
+      let playerIds: string[] = [];
+      if (unassignedRealPlayers.length === 0) {
+        // No real players available, create 2 DummyPlayers
+        const dummyPlayers = await Promise.all([
+          prisma.player.create({
+            data: {
+              name: 'DummyPlayer',
+              tournamentId: id,
+              teamId: team.id,
+            },
+          }),
+          prisma.player.create({
+            data: {
+              name: 'DummyPlayer',
+              tournamentId: id,
+              teamId: team.id,
+            },
+          }),
+        ]);
+        playerIds = dummyPlayers.map((p) => p.id);
+      } else {
+        // Real players available, team starts empty (will be filled by assignments)
+        playerIds = [];
+      }
+
+      const result = {
+        id: team.id,
+        name: team.name,
+        tournamentId: team.tournamentId,
+        playerIds,
+        createdAt: team.createdAt.toISOString(),
+      };
+
+      TeamSchema.parse(result);
+      return result;
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+);
+
+// Delete team
+fastify.delete<{ Params: { id: string; teamId: string } }>(
+  '/tournaments/:id/teams/:teamId',
+  async (request, reply) => {
+    try {
+      const { id, teamId } = request.params;
+
+      // Check if tournament exists
+      const tournament = await prisma.tournament.findUnique({
+        where: { id },
+      });
+
+      if (!tournament) {
+        return reply.code(404).send({ error: 'Tournament not found' });
+      }
+
+      // Check if team exists and belongs to tournament
+      const team = await prisma.team.findUnique({
+        where: { id: teamId },
+      });
+
+      if (!team) {
+        return reply.code(404).send({ error: 'Team not found' });
+      }
+
+      if (team.tournamentId !== id) {
+        return reply.code(400).send({
+          error: 'Team does not belong to this tournament',
+        });
+      }
+
+      await prisma.team.delete({
+        where: { id: teamId },
+      });
+
+      return reply.code(204).send();
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+);
+
+// Assign player to team
+fastify.post<{
+  Params: { id: string; teamId: string };
+  Body: { playerId: string };
+}>('/tournaments/:id/teams/:teamId/assign-player', async (request, reply) => {
+  try {
+    const { id, teamId } = request.params;
+    const { playerId } = request.body;
+
+    if (!playerId || typeof playerId !== 'string') {
+      return reply.code(400).send({ error: 'Player ID is required' });
     }
 
     // Check if tournament exists
@@ -262,25 +543,300 @@ fastify.post<{ Params: { id: string }; Body: { name: string } }>(
       return reply.code(404).send({ error: 'Tournament not found' });
     }
 
-    const player = await prisma.player.create({
-      data: {
-        name,
-        tournamentId: id,
+    // Check if team exists and belongs to tournament
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: {
+        players: true,
       },
     });
 
-    const result = {
-      id: player.id,
-      name: player.name,
-      tournamentId: player.tournamentId,
-    };
+    if (!team) {
+      return reply.code(404).send({ error: 'Team not found' });
+    }
 
-    // Validate player data with shared schema (only id and name)
-    PlayerSchema.parse({ id: player.id, name: player.name });
+    if (team.tournamentId !== id) {
+      return reply.code(400).send({
+        error: 'Team does not belong to this tournament',
+      });
+    }
 
-    return result;
+    // Check if player exists and belongs to tournament
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+    });
+
+    if (!player) {
+      return reply.code(404).send({ error: 'Player not found' });
+    }
+
+    if (player.tournamentId !== id) {
+      return reply.code(400).send({
+        error: 'Player does not belong to this tournament',
+      });
+    }
+
+    // Count real players (excluding DummyPlayers)
+    const realPlayers = team.players.filter((p) => p.name !== 'DummyPlayer');
+    
+    // Teams must always have exactly 2 players
+    if (realPlayers.length >= 2) {
+      return reply.code(400).send({
+        error: 'Team already has 2 players. Remove a player first before assigning a new one.',
+      });
+    }
+
+    // If player is already assigned to another team, remove from that team first
+    if (player.teamId && player.teamId !== teamId) {
+      const oldTeam = await prisma.team.findUnique({
+        where: { id: player.teamId },
+        include: { players: true },
+      });
+      
+      if (oldTeam) {
+        // Remove player from old team
+        await prisma.player.update({
+          where: { id: playerId },
+          data: { teamId: null },
+        });
+        
+        // Ensure old team still has 2 players (add DummyPlayer only if no real players available)
+        const oldTeamRealPlayers = oldTeam.players.filter((p) => p.name !== 'DummyPlayer' && p.id !== playerId);
+        const oldTeamDummyPlayers = oldTeam.players.filter((p) => p.name === 'DummyPlayer');
+        const oldTeamPlayersNeeded = 2 - oldTeamRealPlayers.length - oldTeamDummyPlayers.length;
+        
+        // Check if there are unassigned real players available
+        const unassignedRealPlayers = await prisma.player.findMany({
+          where: {
+            tournamentId: id,
+            teamId: null,
+            name: { not: 'DummyPlayer' },
+          },
+        });
+        
+        // Only add DummyPlayers if no real players are available
+        if (unassignedRealPlayers.length === 0 && oldTeamPlayersNeeded > 0) {
+          for (let i = 0; i < oldTeamPlayersNeeded; i++) {
+            await prisma.player.create({
+              data: {
+                name: 'DummyPlayer',
+                tournamentId: id,
+                teamId: oldTeam.id,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    // Find and remove one DummyPlayer from the target team if it exists
+    const dummyPlayer = team.players.find((p) => p.name === 'DummyPlayer');
+    if (dummyPlayer) {
+      await prisma.player.delete({
+        where: { id: dummyPlayer.id },
+      });
+    }
+
+    // Assign player to team
+    await prisma.player.update({
+      where: { id: playerId },
+      data: { teamId },
+    });
+
+    // After assignment, check if team needs a DummyPlayer
+    // (if team has only 1 player and no real players are available)
+    const updatedTeam = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: { players: true },
+    });
+
+    if (updatedTeam) {
+      // Ensure team never has more than 2 players
+      if (updatedTeam.players.length > 2) {
+        // Remove excess players, prioritizing DummyPlayers
+        const realPlayers = updatedTeam.players.filter((p) => p.name !== 'DummyPlayer');
+        const dummyPlayers = updatedTeam.players.filter((p) => p.name === 'DummyPlayer');
+        
+        // Keep 2 players: prefer real players, then DummyPlayers
+        const playersToKeep = [
+          ...realPlayers.slice(0, 2),
+          ...dummyPlayers.slice(0, Math.max(0, 2 - realPlayers.length))
+        ];
+        const playersToRemove = updatedTeam.players.filter(
+          (p) => !playersToKeep.some((kp) => kp.id === p.id)
+        );
+        
+        for (const playerToRemove of playersToRemove) {
+          await prisma.player.delete({
+            where: { id: playerToRemove.id },
+          });
+        }
+        
+        // Re-fetch team after cleanup
+        const cleanedTeam = await prisma.team.findUnique({
+          where: { id: teamId },
+          include: { players: true },
+        });
+        
+        if (cleanedTeam) {
+          const realPlayersAfterCleanup = cleanedTeam.players.filter((p) => p.name !== 'DummyPlayer');
+          const dummyPlayersAfterCleanup = cleanedTeam.players.filter((p) => p.name === 'DummyPlayer');
+          const totalPlayersAfterCleanup = realPlayersAfterCleanup.length + dummyPlayersAfterCleanup.length;
+          const playersNeeded = 2 - totalPlayersAfterCleanup;
+
+          if (playersNeeded > 0) {
+            // Check if there are unassigned real players available
+            const unassignedRealPlayers = await prisma.player.findMany({
+              where: {
+                tournamentId: id,
+                teamId: null,
+                name: { not: 'DummyPlayer' },
+              },
+            });
+
+            // Only add DummyPlayers if no real players are available
+            if (unassignedRealPlayers.length === 0) {
+              for (let i = 0; i < playersNeeded; i++) {
+                await prisma.player.create({
+                  data: {
+                    name: 'DummyPlayer',
+                    tournamentId: id,
+                    teamId: teamId,
+                  },
+                });
+              }
+            }
+          }
+        }
+        
+        return reply.code(204).send();
+      }
+
+      const realPlayersAfterAssignment = updatedTeam.players.filter((p) => p.name !== 'DummyPlayer');
+      const dummyPlayersAfterAssignment = updatedTeam.players.filter((p) => p.name === 'DummyPlayer');
+      const totalPlayers = realPlayersAfterAssignment.length + dummyPlayersAfterAssignment.length;
+      const playersNeeded = 2 - totalPlayers;
+
+      if (playersNeeded > 0) {
+        // Check if there are unassigned real players available
+        const unassignedRealPlayers = await prisma.player.findMany({
+          where: {
+            tournamentId: id,
+            teamId: null,
+            name: { not: 'DummyPlayer' },
+          },
+        });
+
+        // Only add DummyPlayers if no real players are available
+        if (unassignedRealPlayers.length === 0) {
+          for (let i = 0; i < playersNeeded; i++) {
+            await prisma.player.create({
+              data: {
+                name: 'DummyPlayer',
+                tournamentId: id,
+                teamId: teamId,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    return reply.code(204).send();
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
-);
+});
+
+// Remove player from team
+fastify.post<{
+  Params: { id: string; playerId: string };
+}>('/tournaments/:id/players/:playerId/unassign', async (request, reply) => {
+  try {
+    const { id, playerId } = request.params;
+
+    // Check if tournament exists
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+    // Check if player exists and belongs to tournament
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+    });
+
+    if (!player) {
+      return reply.code(404).send({ error: 'Player not found' });
+    }
+
+    if (player.tournamentId !== id) {
+      return reply.code(400).send({
+        error: 'Player does not belong to this tournament',
+      });
+    }
+
+    // Get team to check current player count
+    const team = player.teamId
+      ? await prisma.team.findUnique({
+          where: { id: player.teamId },
+          include: {
+            players: true,
+          },
+        })
+      : null;
+
+    // Remove player from team
+    await prisma.player.update({
+      where: { id: playerId },
+      data: { teamId: null },
+    });
+
+    // Teams must always have exactly 2 players - add DummyPlayer(s) only if no real players available
+    if (team) {
+      // Count remaining players (excluding the one we just removed)
+      const remainingPlayers = team.players.filter((p) => p.id !== playerId);
+      const playersNeeded = 2 - remainingPlayers.length;
+
+      // Check if there are unassigned real players available
+      const unassignedRealPlayers = await prisma.player.findMany({
+        where: {
+          tournamentId: id,
+          teamId: null,
+          name: { not: 'DummyPlayer' },
+        },
+      });
+
+      // Only add DummyPlayers if no real players are available
+      if (unassignedRealPlayers.length === 0 && playersNeeded > 0) {
+        for (let i = 0; i < playersNeeded; i++) {
+          await prisma.player.create({
+            data: {
+              name: 'DummyPlayer',
+              tournamentId: id,
+              teamId: team.id,
+            },
+          });
+        }
+      }
+    }
+
+    return reply.code(204).send();
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
 
 const start = async () => {
   try {

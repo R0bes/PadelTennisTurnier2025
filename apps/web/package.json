@@ -11,8 +11,10 @@
     "@tournament-app/shared-types": "workspace:*",
     "@tournament-app/shared-utils": "workspace:*",
     "framer-motion": "^10.16.16",
+    "lucide-react": "^0.294.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.4.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

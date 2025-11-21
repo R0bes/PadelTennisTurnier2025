@@ -1,3 +1,4 @@
+import { Trophy, Medal, Award, Users } from 'lucide-react';
 import type { TournamentState } from '@tournament-app/shared-types';
 
 interface SummaryPageProps {
@@ -29,7 +30,10 @@ export default function SummaryPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Tournament Summary</h1>
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+          <Trophy className="w-8 h-8 text-yellow-500" />
+          Tournament Summary
+        </h1>
         <p className="mt-2 text-gray-600">
           Final results and standings of the tournament.
         </p>
@@ -44,9 +48,12 @@ export default function SummaryPage({
 
       {/* Podium */}
       {podium.length >= 3 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-6">Podium</h2>
-          <div className="flex items-end justify-center gap-4">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
+            <Medal className="w-5 h-5" />
+            Podium
+          </h2>
+          <div className="flex items-end justify-center gap-6">
             {podium.map((entry) => (
               <div
                 key={entry.position}
@@ -59,29 +66,35 @@ export default function SummaryPage({
                 }`}
               >
                 <div
-                  className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white mb-2 ${
+                  className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white mb-3 shadow-lg ${
                     entry.position === 1
-                      ? 'bg-yellow-400'
+                      ? 'bg-gradient-to-br from-yellow-400 to-yellow-500'
                       : entry.position === 2
-                      ? 'bg-gray-300'
-                      : 'bg-orange-400'
+                      ? 'bg-gradient-to-br from-gray-300 to-gray-400'
+                      : 'bg-gradient-to-br from-orange-400 to-orange-500'
                   }`}
                 >
-                  {entry.position}
+                  {entry.position === 1 ? (
+                    <Trophy className="w-10 h-10" />
+                  ) : entry.position === 2 ? (
+                    <Medal className="w-10 h-10" />
+                  ) : (
+                    <Award className="w-10 h-10" />
+                  )}
                 </div>
                 <div
-                  className={`w-32 p-4 rounded-t-lg text-center ${
+                  className={`w-36 p-4 rounded-t-xl text-center shadow-md ${
                     entry.position === 1
-                      ? 'bg-yellow-400 h-32'
+                      ? 'bg-gradient-to-br from-yellow-400 to-yellow-500 h-36'
                       : entry.position === 2
-                      ? 'bg-gray-300 h-24'
-                      : 'bg-orange-400 h-20'
+                      ? 'bg-gradient-to-br from-gray-300 to-gray-400 h-28'
+                      : 'bg-gradient-to-br from-orange-400 to-orange-500 h-24'
                   }`}
                 >
-                  <div className="font-semibold text-gray-800">
+                  <div className="font-bold text-gray-900 text-lg">
                     {entry.name}
                   </div>
-                  <div className="text-sm text-gray-600 mt-1">
+                  <div className="text-sm text-gray-700 mt-2 font-semibold">
                     {entry.points} pts
                   </div>
                 </div>
@@ -93,7 +106,8 @@ export default function SummaryPage({
 
       {/* Final Standings */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+          <Users className="w-5 h-5" />
           Final Standings
         </h2>
         {standings.length === 0 ? (
