@@ -228,7 +228,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-md border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 sm:px-4 lg:px-6">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <Trophy className="w-6 h-6 text-blue-600" />
@@ -292,13 +292,13 @@ function App() {
 
       {error && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4">
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-full mx-auto px-2 sm:px-4 lg:px-6">
             <p className="text-sm text-red-700">{error}</p>
           </div>
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-full mx-auto px-2 sm:px-4 lg:px-6 py-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentPhase}
