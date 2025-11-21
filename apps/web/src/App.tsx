@@ -9,7 +9,6 @@ import {
   setPhase,
 } from './api/tournamentApi';
 import RegistrationPage from './pages/RegistrationPage';
-import TeamSetupPage from './pages/TeamSetupPage';
 import TournamentFlowPage from './pages/TournamentFlowPage';
 import SummaryPage from './pages/SummaryPage';
 
@@ -191,7 +190,7 @@ function App() {
       />
     ),
     team_setup: (
-      <TeamSetupPage
+      <RegistrationPage
         tournamentState={tournamentState}
         isAdmin={isAdmin}
         onRefresh={refreshTournament}
@@ -216,7 +215,7 @@ function App() {
 
   const getNextPhase = (current: Phase): Phase | null => {
     const transitions: Record<Phase, Phase | null> = {
-      registration: 'team_setup',
+      registration: 'swiss_rounds',
       team_setup: 'swiss_rounds',
       swiss_rounds: 'ko_bracket',
       ko_bracket: 'summary',
