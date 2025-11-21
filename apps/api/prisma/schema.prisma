@@ -1,0 +1,27 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Tournament {
+  id        String   @id @default(cuid())
+  name      String
+  phase     String   @default("registration")
+  createdAt DateTime @default(now())
+  players   Player[]
+}
+
+model Player {
+  id           String     @id @default(cuid())
+  name         String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+}
+
