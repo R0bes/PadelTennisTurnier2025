@@ -99,6 +99,7 @@ fastify.post<{ Body: { name: string } }>('/tournaments', async (request, reply) 
         id: player.id,
         name: player.name,
         teamId: player.teamId || null,
+        telegramUsername: player.telegramUsername || null,
       })),
       teams: tournamentWithTeams!.teams.map((team) => ({
         id: team.id,
@@ -149,6 +150,7 @@ fastify.get<{ Params: { id: string } }>(
           id: player.id,
           name: player.name,
           teamId: player.teamId || null,
+          telegramUsername: player.telegramUsername || null,
         })),
     };
 
@@ -195,6 +197,7 @@ fastify.get<{ Params: { id: string } }>(
           id: player.id,
           name: player.name,
           teamId: player.teamId || null,
+          telegramUsername: player.telegramUsername || null,
         })),
         teams: tournament.teams.map((team) => ({
           id: team.id,
@@ -282,6 +285,7 @@ fastify.post<{ Params: { id: string }; Body: { phase: Phase } }>(
         id: player.id,
         name: player.name,
         teamId: player.teamId || null,
+        telegramUsername: player.telegramUsername || null,
       })),
       teams: updated.teams.map((team) => ({
         id: team.id,
@@ -834,6 +838,70 @@ fastify.post<{
     }
 
     return reply.code(204).send();
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Link player to Telegram username
+fastify.post<{
+  Params: { id: string; playerId: string };
+  Body: { telegramUsername: string };
+}>('/tournaments/:id/players/:playerId/link-telegram', async (request, reply) => {
+  try {
+    const { id, playerId } = request.params;
+    const { telegramUsername } = request.body;
+
+    if (!telegramUsername || typeof telegramUsername !== 'string') {
+      return reply.code(400).send({ error: 'Telegram username is required' });
+    }
+
+    // Normalize username (remove @ if present, lowercase)
+    const normalizedUsername = telegramUsername.replace(/^@/, '').toLowerCase();
+
+    // Check if tournament exists
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+    // Check if player exists and belongs to tournament
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+    });
+
+    if (!player) {
+      return reply.code(404).send({ error: 'Player not found' });
+    }
+
+    if (player.tournamentId !== id) {
+      return reply.code(400).send({
+        error: 'Player does not belong to this tournament',
+      });
+    }
+
+    // Update player with telegram username
+    const updated = await prisma.player.update({
+      where: { id: playerId },
+      data: { telegramUsername: normalizedUsername },
+    });
+
+    const result = {
+      id: updated.id,
+      name: updated.name,
+      teamId: updated.teamId || null,
+      telegramUsername: updated.telegramUsername || null,
+    };
+
+    PlayerSchema.parse(result);
+    return result;
   } catch (error) {
     fastify.log.error(error);
     return reply.code(500).send({

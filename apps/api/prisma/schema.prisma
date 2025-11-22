@@ -20,12 +20,13 @@ model Tournament {
 }
 
 model Player {
-  id           String     @id @default(cuid())
-  name         String
-  tournament   Tournament @relation(fields: [tournamentId], references: [id])
-  tournamentId String
-  teamId       String?
-  team         Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  id               String     @id @default(cuid())
+  name             String
+  telegramUsername String?
+  tournament       Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId     String
+  teamId           String?
+  team             Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
 }
 
 model Team {

@@ -5,7 +5,8 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
-    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:bot": "pnpm --filter bot dev",
+    "dev": "npm-run-all --parallel dev:api dev:web dev:bot",
     "build": "pnpm -r build"
   },
   "devDependencies": {
