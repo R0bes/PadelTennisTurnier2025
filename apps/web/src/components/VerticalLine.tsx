@@ -7,7 +7,7 @@ interface VerticalLineProps {
 }
 
 export default function VerticalLine({ 
-  height = 'h-12', 
+  height = 'h-20', 
   delay = 0,
   className = ''
 }: VerticalLineProps) {
@@ -16,7 +16,7 @@ export default function VerticalLine({
       initial={{ opacity: 0, scaleY: 0 }}
       animate={{ opacity: 1, scaleY: 1 }}
       transition={{ duration: 0.3, delay }}
-      className={`w-0.5 ${height} bg-gray-300 ${className}`}
+      className={`w-1 ${height} bg-retro-brown-400 ${className}`}
     />
   );
 }

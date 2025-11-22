@@ -4,7 +4,9 @@ import { setupErrorHandler } from './middleware/errorHandler.js';
 import { handleStart } from './commands/start.js';
 import { handleHelp } from './commands/help.js';
 import { handleMyInfo, handleLink, handleRegister, handleRegisterConfirm, handleRegisterCancel, handleAvatar, handleAvatarTelegram, handleAvatarStyle, handleAvatarSetStyle, handleAvatarUrl, handleAvatarSkip } from './commands/player.js';
-import { handleTournament, handlePhase, handleTeams, handleAddAdmin, handleRemoveAdmin, handleListAdmins } from './commands/admin.js';
+import { handleTournament, handlePhase, handleTeams, handleAddAdmin, handleRemoveAdmin, handleListAdmins, handleBroadcast } from './commands/admin.js';
+import { handleStats, handleLeaderboard, handlePodium } from './commands/stats.js';
+import { handleReportMatch, handleReportMatchScore, handleScoreInput, handleSubmitResult, handleConfirmations, handleConfirmResult, handleDisputes, handleResolveDispute } from './commands/match.js';
 
 const bot = new Bot(config.botToken);
 
@@ -13,13 +15,24 @@ setupErrorHandler(bot);
 
 // Commands
 bot.command('start', handleStart);
-bot.command('help', handleHelp);
+bot.command('help', (ctx) => {
+  const args = ctx.message?.text?.split(' ') || [];
+  const context = args[1] || 'general';
+  return handleHelp(ctx, context);
+});
 
 // Player commands
 bot.command('myinfo', handleMyInfo);
 bot.command('link', handleLink);
 bot.command('register', handleRegister);
 bot.command('avatar', handleAvatar);
+bot.command('reportmatch', handleReportMatch);
+bot.command('confirmations', handleConfirmations);
+bot.command('stats', handleStats);
+bot.command('leaderboard', (ctx) => handleLeaderboard(ctx, 'players'));
+bot.command('teamleaderboard', (ctx) => handleLeaderboard(ctx, 'teams'));
+bot.command('podium', (ctx) => handlePodium(ctx, 'players'));
+bot.command('teampodium', (ctx) => handlePodium(ctx, 'teams'));
 
 // Admin commands
 bot.command('tournament', handleTournament);
@@ -28,6 +41,8 @@ bot.command('teams', handleTeams);
 bot.command('addadmin', handleAddAdmin);
 bot.command('removeadmin', handleRemoveAdmin);
 bot.command('listadmins', handleListAdmins);
+bot.command('disputes', handleDisputes);
+bot.command('broadcast', handleBroadcast);
 
 // Status command (for all users)
 bot.command('status', async (ctx) => {
@@ -56,11 +71,9 @@ bot.callbackQuery(/^register_confirm_/, async (ctx) => {
     playerName = messageText.match(/als (.+?) registrieren/i)?.[1];
   }
   
-  // Fallback to Telegram name
+  // Fallback to Telegram first name or username
   if (!playerName) {
-    const firstName = ctx.from?.first_name || '';
-    const lastName = ctx.from?.last_name || '';
-    playerName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    playerName = ctx.from?.first_name || ctx.from?.username || '';
   }
   
   if (playerName) {
@@ -95,6 +108,143 @@ bot.callbackQuery(/^avatar_url_/, async (ctx) => {
 
 bot.callbackQuery(/^avatar_skip_/, async (ctx) => {
   await handleAvatarSkip(ctx);
+});
+
+// Match result callbacks
+bot.callbackQuery(/^report_match_(.+?)_(\d+)$/, async (ctx) => {
+  const match = ctx.callbackQuery.data.match(/^report_match_(.+?)_(\d+)$/);
+  if (match) {
+    await handleReportMatchScore(ctx, match[1]);
+  }
+});
+
+bot.callbackQuery(/^winner_(.+?)_(.+?)_(.+?)_(\d+)$/, async (ctx) => {
+  const match = ctx.callbackQuery.data.match(/^winner_(.+?)_(.+?)_(.+?)_(\d+)$/);
+  if (match) {
+    await handleSubmitResult(ctx, match[1], match[3], match[2]);
+  }
+});
+
+bot.callbackQuery(/^confirm_(.+?)_(\d+)$/, async (ctx) => {
+  const match = ctx.callbackQuery.data.match(/^confirm_(.+?)_(\d+)$/);
+  if (match) {
+    await handleConfirmResult(ctx, match[1], true);
+  }
+});
+
+bot.callbackQuery(/^dispute_(.+?)_(\d+)$/, async (ctx) => {
+  const match = ctx.callbackQuery.data.match(/^dispute_(.+?)_(\d+)$/);
+  if (match) {
+    await handleConfirmResult(ctx, match[1], false);
+  }
+});
+
+// Action button handlers
+bot.callbackQuery(/^action_start$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleStart(ctx);
+});
+
+bot.callbackQuery(/^action_myinfo_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleMyInfo(ctx);
+});
+
+bot.callbackQuery(/^action_stats_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleStats(ctx);
+});
+
+bot.callbackQuery(/^action_leaderboard_(players|teams|\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const match = ctx.callbackQuery.data.match(/^action_leaderboard_(.+)$/);
+  const type = match && (match[1] === 'players' || match[1] === 'teams') ? match[1] : 'players';
+  await handleLeaderboard(ctx, type as 'players' | 'teams');
+});
+
+bot.callbackQuery(/^action_teamleaderboard_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleLeaderboard(ctx, 'teams');
+});
+
+bot.callbackQuery(/^action_podium_(players|teams)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const match = ctx.callbackQuery.data.match(/^action_podium_(.+)$/);
+  const type = (match?.[1] || 'players') as 'players' | 'teams';
+  await handlePodium(ctx, type);
+});
+
+bot.callbackQuery(/^action_confirmations_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleConfirmations(ctx);
+});
+
+bot.callbackQuery(/^action_reportmatch_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleReportMatch(ctx);
+});
+
+bot.callbackQuery(/^action_register_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleRegister(ctx);
+});
+
+bot.callbackQuery(/^action_link_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleLink(ctx);
+});
+
+bot.callbackQuery(/^action_tournament_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleTournament(ctx);
+});
+
+bot.callbackQuery(/^action_phase_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handlePhase(ctx);
+});
+
+bot.callbackQuery(/^action_teams_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleTeams(ctx);
+});
+
+bot.callbackQuery(/^action_broadcast_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.reply('📢 Bitte gib deine Nachricht ein:\n/broadcast <nachricht>');
+});
+
+bot.callbackQuery(/^action_admin_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const { createAdminActionButtons } = await import('./utils/keyboards.js');
+  const userId = ctx.from?.id;
+  if (userId) {
+    const keyboard = createAdminActionButtons(userId);
+    await ctx.reply('⚙️ *Admin-Menü*\n\nWähle eine Aktion:', {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  }
+});
+
+// Phase selection buttons
+bot.callbackQuery(/^phase_(player|team|swiss|ko|summary)_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const match = ctx.callbackQuery.data.match(/^phase_(.+?)_(\d+)$/);
+  if (match) {
+    const phase = match[1] as any;
+    // Simulate command with phase argument
+    ctx.message = { ...ctx.message, text: `/phase ${phase}` } as any;
+    await handlePhase(ctx);
+  }
+});
+
+// Help button handlers
+bot.callbackQuery(/^help_(general|player|admin|register|confirmations|match|stats)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const match = ctx.callbackQuery.data.match(/^help_(.+)$/);
+  const context = match?.[1] || 'general';
+  await handleHelp(ctx, context);
 });
 
 // Start notification service

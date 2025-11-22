@@ -17,6 +17,7 @@ type HorizontalLineComponentProps = {
 
 type TypingTextComponentProps = {
   text: string;
+  secondaryText?: string;
   className?: string;
   faded?: boolean;
   showCursor?: boolean;
@@ -77,6 +78,7 @@ export interface TextElement extends BasePhaseViewElement {
 export interface TypingTextElement extends BasePhaseViewElement {
   type: 'typingText';
   text: TypingTextComponentProps['text'];
+  secondaryText?: TypingTextComponentProps['secondaryText'];
   className?: TypingTextComponentProps['className'];
   faded?: TypingTextComponentProps['faded'] | ((state: TournamentState, props?: any) => boolean);
   showCursor?: TypingTextComponentProps['showCursor'] | ((state: TournamentState, props?: any) => boolean);

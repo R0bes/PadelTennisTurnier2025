@@ -192,6 +192,62 @@ export async function notifyPlayersAboutMatches(
 }
 
 /**
+ * Notify players when opponent reports result
+ */
+export async function notifyOpponentResultReported(
+  bot: Bot,
+  tournamentState: TournamentState,
+  matchKey: string,
+  reportedByTeamId: string
+): Promise<void> {
+  try {
+    const readyMatches = await getReadyMatches(tournamentState.id);
+    const match = readyMatches.find(m => m.matchKey === matchKey);
+    
+    if (!match || !match.team1 || !match.team2) return;
+
+    // Find opposing team
+    const opposingTeam = match.team1.id === reportedByTeamId ? match.team2 : match.team1;
+    if (!opposingTeam) return;
+
+    const playerToTelegramId = extractTelegramUserIds(tournamentState.players, tournamentState);
+    const opposingPlayers = getPlayersFromMatch(
+      { ...match, team1: opposingTeam, team2: null },
+      tournamentState
+    );
+
+    for (const player of opposingPlayers) {
+      const telegramUserId = playerToTelegramId.get(player.id);
+      if (!telegramUserId) continue;
+
+      const reportingTeam = match.team1.id === reportedByTeamId ? match.team1 : match.team2;
+      const message =
+        `📊 *Neues Ergebnis gemeldet!*\n\n` +
+        `Match: *${match.matchNumber}*\n` +
+        `Gegner: *${getTeamPlayerNames(reportingTeam, tournamentState)}*\n\n` +
+        `Bitte bestätige das Ergebnis mit /confirmations`;
+
+      await sendNotification(bot, telegramUserId, message);
+    }
+  } catch (error) {
+    console.error('Error notifying opponent:', error);
+  }
+}
+
+/**
+ * Schedule match reminders (15 minutes before)
+ * This is a simplified version - in production, you'd want to store scheduled matches
+ */
+export async function scheduleMatchReminders(
+  bot: Bot,
+  tournamentState: TournamentState
+): Promise<void> {
+  // This would require storing match schedules with timestamps
+  // For now, this is a placeholder that can be called when matches are created
+  // In a real implementation, you'd use a job queue or cron-like system
+}
+
+/**
  * Start notification polling service
  * Checks for ready matches every N seconds
  */
@@ -209,6 +265,12 @@ export function startNotificationService(
       }
       
       await notifyPlayersAboutMatches(bot, tournamentState);
+      
+      // Check KO round completion for broadcasts
+      if (tournamentState.phase === 'ko') {
+        const { checkKORoundCompletion } = await import('./koRoundBroadcast.js');
+        await checkKORoundCompletion(bot);
+      }
     } catch (error) {
       console.error('Error in notification service:', error);
     }

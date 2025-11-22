@@ -32,7 +32,7 @@ export default function PhaseViewRenderer({
         switch (element.type) {
           case 'verticalLine':
             return (
-              <div key={element.id || `verticalLine-${index}`} className="flex flex-col items-center">
+              <div key={element.id || `verticalLine-${index}`} className="flex flex-col items-center w-full">
                 <VerticalLine
                   delay={delay}
                   height={element.height}
@@ -83,6 +83,7 @@ export default function PhaseViewRenderer({
               <TypingText
                 key={element.id || `typingText-${index}`}
                 text={element.text}
+                secondaryText={element.secondaryText}
                 className={element.className}
                 faded={typingFaded}
                 showCursor={typingShowCursor}

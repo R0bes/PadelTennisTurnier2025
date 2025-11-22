@@ -47,7 +47,16 @@ export async function handleMyInfo(ctx: Context) {
     }
 
     const message = formatPlayerInfo(player, state.teams);
-    await ctx.reply(message, { parse_mode: 'Markdown' });
+    
+    // Add action buttons
+    const { InlineKeyboard } = await import('grammy');
+    const { createPlayerActionButtons } = await import('../utils/keyboards.js');
+    const keyboard = createPlayerActionButtons(userId);
+    
+    await ctx.reply(message, { 
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
     await ctx.reply(`❌ Fehler: ${errorMessage}`);
@@ -92,22 +101,22 @@ export async function handleLink(ctx: Context) {
       return;
     }
 
-    // Try to find player by name matching (use first_name or full name from Telegram)
+    // Try to find player by name matching (use first_name or username from Telegram)
     const firstName = ctx.from?.first_name;
-    const lastName = ctx.from?.last_name;
-    const fullName = firstName && lastName ? `${firstName} ${lastName}` : firstName;
+    const username = ctx.from?.username;
+    const searchName = firstName || username || '';
     
-    if (fullName) {
+    if (searchName) {
       // Try exact match first
       let playerByName = state.players.find(
-        (p) => p.name.toLowerCase() === fullName.toLowerCase()
+        (p) => p.name.toLowerCase() === searchName.toLowerCase()
       );
       
       // If no exact match, try partial match
       if (!playerByName) {
         playerByName = state.players.find(
-          (p) => p.name.toLowerCase().includes(firstName.toLowerCase()) ||
-                 firstName.toLowerCase().includes(p.name.toLowerCase().split(' ')[0])
+          (p) => p.name.toLowerCase().includes(searchName.toLowerCase()) ||
+                 searchName.toLowerCase().includes(p.name.toLowerCase())
         );
       }
 
@@ -146,14 +155,12 @@ export async function handleRegister(ctx: Context) {
     return;
   }
 
-  // If no name provided, use Telegram name as default
+  // If no name provided, use Telegram first name or username as default
   if (!playerName || playerName.length === 0) {
-    const firstName = ctx.from?.first_name || '';
-    const lastName = ctx.from?.last_name || '';
-    playerName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    playerName = ctx.from?.first_name || ctx.from?.username || '';
     
     if (!playerName) {
-      await ctx.reply('❌ Bitte gib einen Namen an:\n/register <name>\n\nBeispiel: /register Max Mustermann');
+      await ctx.reply('❌ Bitte gib einen Namen an:\n/register <name>\n\nBeispiel: /register Max');
       return;
     }
   }
@@ -188,9 +195,12 @@ export async function handleRegister(ctx: Context) {
 
     // Show confirmation with thumbs up/down buttons
     const { InlineKeyboard } = await import('grammy');
+    const { createNavigationButtons } = await import('../utils/keyboards.js');
     const keyboard = new InlineKeyboard()
       .text('👍 Ja, registrieren', `register_confirm_${userId}_${Date.now()}`)
-      .text('👎 Nein, abbrechen', `register_cancel_${userId}_${Date.now()}`);
+      .text('👎 Nein, abbrechen', `register_cancel_${userId}_${Date.now()}`)
+      .row()
+      .text('❓ Hilfe', 'help_register');
 
     await ctx.reply(
       `📝 Möchtest du dich als *${playerName}* registrieren?\n\n` +
@@ -248,23 +258,24 @@ export async function handleRegisterConfirm(ctx: Context, playerName: string) {
     // Link with Telegram identifier (username or user ID)
     await linkPlayerToTelegram(tournamentId, newPlayer.id, telegramIdentifier);
 
-    await ctx.answerCallbackQuery('Erfolgreich registriert!');
+    await ctx.answerCallbackQuery('✅ Erfolgreich registriert!');
     
     // Immediately ask for avatar selection
     const { InlineKeyboard } = await import('grammy');
     const keyboard = new InlineKeyboard()
-      .text('📷 Profilbild verwenden', `avatar_telegram_${userId}_${Date.now()}`)
+      .text('📷 Profilbild', `avatar_telegram_${userId}_${Date.now()}`)
+      .text('🎨 Stil wählen', `avatar_style_${userId}_${Date.now()}`)
       .row()
-      .text('🎨 Avatar-Stil wählen', `avatar_style_${userId}_${Date.now()}`)
-      .row()
-      .text('⏭️ Später', `avatar_skip_${userId}_${Date.now()}`);
+      .text('⏭️ Später', `avatar_skip_${userId}_${Date.now()}`)
+      .text('❓ Hilfe', 'help_register');
 
     await ctx.editMessageText(
       `✅ Erfolgreich registriert!\n\n` +
-      `Spieler: ${newPlayer.name}\n` +
-      `Tournament: ${activeTournament.name}\n\n` +
+      `Spieler: *${newPlayer.name}*\n` +
+      `Tournament: *${activeTournament.name}*\n\n` +
       `🖼️ Möchtest du jetzt ein Avatar auswählen?`,
       {
+        parse_mode: 'Markdown',
         reply_markup: keyboard,
       }
     );
@@ -534,13 +545,22 @@ export async function handleAvatarSetStyle(ctx: Context, style: string) {
     const { setPlayerAvatar } = await import('../api/client.js');
     await setPlayerAvatar(tournamentId, player.id, avatarUrl);
 
-    await ctx.answerCallbackQuery('Avatar gesetzt!');
+    await ctx.answerCallbackQuery('✅ Avatar gesetzt!');
+    
+    const { InlineKeyboard } = await import('grammy');
+    const { createPlayerActionButtons } = await import('../utils/keyboards.js');
+    const keyboard = createPlayerActionButtons(userId);
+    
     await ctx.editMessageText(
       `✅ Alles fertig!\n\n` +
-      `Spieler: ${player.name}\n` +
+      `Spieler: *${player.name}*\n` +
       `Avatar: ${styleNames[style] || style}\n` +
-      `Tournament: ${activeTournament.name}\n\n` +
-      `Verwende /myinfo um deine Daten anzuzeigen.`
+      `Tournament: *${activeTournament.name}*\n\n` +
+      `Was möchtest du als nächstes tun?`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      }
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
@@ -584,13 +604,22 @@ export async function handleAvatarSkip(ctx: Context) {
     );
 
     if (player) {
-      await ctx.answerCallbackQuery('Avatar-Auswahl übersprungen');
+      await ctx.answerCallbackQuery('✅ Avatar-Auswahl übersprungen');
+      
+      const { InlineKeyboard } = await import('grammy');
+      const { createPlayerActionButtons } = await import('../utils/keyboards.js');
+      const keyboard = createPlayerActionButtons(userId);
+      
       await ctx.editMessageText(
         `✅ Registrierung abgeschlossen!\n\n` +
-        `Spieler: ${player.name}\n` +
-        `Tournament: ${activeTournament.name}\n\n` +
+        `Spieler: *${player.name}*\n` +
+        `Tournament: *${activeTournament.name}*\n\n` +
         `Du kannst später mit /avatar ein Avatar auswählen.\n\n` +
-        `Verwende /myinfo um deine Daten anzuzeigen.`
+        `Was möchtest du als nächstes tun?`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        }
       );
     } else {
       await ctx.answerCallbackQuery('Spieler nicht gefunden');

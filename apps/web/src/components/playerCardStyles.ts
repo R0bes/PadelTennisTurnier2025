@@ -15,28 +15,28 @@ export function getPlayerCardStyles(
 ): PlayerCardSizeConfig {
   if (isCompact) {
     return {
-      padding: 'p-2',
-      avatarSize: isHorizontal ? 'w-7 h-7' : 'w-8 h-8',
+      padding: 'p-1.5',
+      avatarSize: isHorizontal ? 'w-8 h-8' : 'w-9 h-9',
       avatarMargin: isHorizontal ? '' : 'mb-1',
-      textSize: 'text-xs',
-      gap: 'gap-2',
+      textSize: 'text-base',
+      gap: 'gap-1.5',
     };
   }
   
   if (isHorizontal) {
     return {
-      padding: 'px-2 py-1.5',
-      avatarSize: 'w-10 h-10',
-      textSize: 'text-sm',
+      padding: 'px-2 py-1',
+      avatarSize: 'w-11 h-11',
+      textSize: 'text-lg',
       gap: 'gap-2',
     };
   }
   
   return {
-    padding: 'p-3',
-    avatarSize: 'w-12 h-12',
-    avatarMargin: 'mb-2',
-    textSize: 'text-sm',
+    padding: 'p-2.5',
+    avatarSize: 'w-14 h-14',
+    avatarMargin: 'mb-1.5',
+    textSize: 'text-lg',
     gap: 'gap-2',
   };
 }

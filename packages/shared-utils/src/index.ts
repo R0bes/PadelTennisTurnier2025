@@ -92,6 +92,11 @@ export function generateTeamName(index: number): string {
   return `${verbs[verbIndex]} ${nouns[nounIndex]}`;
 }
 
+// Check if a player is a dummy player (handles both 'DummyPlayer' and 'Dummy Player')
+export function isDummyPlayer(player: { name: string }): boolean {
+  return player.name === 'DummyPlayer' || player.name === 'Dummy Player';
+}
+
 // Generate avatar URL for dummy players (deterministic based on player ID)
 // Using "bottts" style for a more "dummy" look
 export function getDummyAvatarUrl(playerId: string): string {

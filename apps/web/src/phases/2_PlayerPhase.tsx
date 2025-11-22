@@ -41,26 +41,18 @@ export default function PlayerPhase({
       if (tournamentState.phase === 'player' && tournamentState.players.length === 0) {
         isAddingPlayersRef.current = true;
         
-        const firstNames = [
+        const playerNames = [
           'Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry',
           'Iris', 'Jack', 'Kate', 'Liam', 'Mia', 'Noah', 'Olivia', 'Paul',
           'Quinn', 'Rachel', 'Sam', 'Tina', 'Uma', 'Victor', 'Wendy', 'Xavier',
           'Yara', 'Zoe'
         ];
-        const lastNames = [
-          'Anderson', 'Brown', 'Clark', 'Davis', 'Evans', 'Foster', 'Garcia', 'Harris',
-          'Jackson', 'Kim', 'Lee', 'Martinez', 'Nguyen', 'O\'Connor', 'Patel', 'Quinn',
-          'Rodriguez', 'Smith', 'Taylor', 'Upton', 'Vargas', 'Wilson', 'Xu', 'Young',
-          'Zhang', 'Zimmerman'
-        ];
 
         try {
-          for (let i = 0; i < 26; i++) {
-            const firstName = firstNames[i];
-            const lastName = lastNames[i];
-            const fullName = `${firstName} ${lastName}`;
+          for (let i = 0; i < playerNames.length; i++) {
+            const playerName = playerNames[i];
             
-            await registerPlayer(tournamentState.id, fullName);
+            await registerPlayer(tournamentState.id, playerName);
             const currentState = await getTournamentState(tournamentState.id);
             onStateUpdate(currentState);
             
@@ -101,7 +93,7 @@ export default function PlayerPhase({
   };
   // Player View Component
   const PlayerView = ({ tournamentState, isAdmin, isDeleting, onDeletePlayer }: any) => (
-    <div className="bg-white rounded-lg shadow p-6 relative">
+    <div className="bg-gradient-to-br from-retro-blue-50/70 to-white/90 rounded-lg shadow-retro border-2 border-retro-blue-200/60 p-6 relative">
       {tournamentState.players.length === 0 ? (
         <div className="text-center py-12">
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -122,7 +114,7 @@ export default function PlayerPhase({
               // The normal card transitions to team cards, the ghost card appears at the same position
               if (player.teamId && isInTeamPhase) {
                 return (
-                  <div key={player.id} className="relative">
+                  <div key={player.id} className="relative z-50">
                     {/* Normal card that transitions to team cards */}
                     <PlayerCard
                       player={player}
@@ -136,7 +128,7 @@ export default function PlayerPhase({
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.5, delay: 0.2 }}
-                      className="absolute inset-0 pointer-events-none"
+                      className="absolute inset-0 pointer-events-none z-40"
                     >
                       <PlayerGhostCard player={player} layout="horizontal" />
                     </motion.div>
@@ -170,6 +162,7 @@ export default function PlayerPhase({
       type: 'typingText',
       id: 'typing-text-anmeldung',
       text: 'Die Anmeldung ist eröffnet ...',
+      secondaryText: '... wer zu spät kommt, hat Pech gehabt.',
       faded: (state) => state.phase !== 'player',
       showCursor: (state) => state.phase === 'player',
     },
@@ -218,6 +211,6 @@ export const playerPhaseConfig: PhaseConfig = {
   id: 'player',
   title: 'Anmeldung zum Turnier - letzte Chance!',
   description: 'Spieler können sich für das Turnier anmelden',
-  backgroundColor: 'bg-blue-50',
+  backgroundColor: 'bg-gradient-to-br from-retro-blue-50/80 via-retro-blue-100/90 to-retro-blue-50/80',
   nextPhase: 'team',
 };

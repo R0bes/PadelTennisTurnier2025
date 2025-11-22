@@ -188,7 +188,7 @@ export const summaryPhaseConfig: PhaseConfig = {
   id: 'summary',
   title: 'Summary',
   description: 'Turnier-Zusammenfassung und Ergebnisse',
-  backgroundColor: 'bg-yellow-50',
+  backgroundColor: 'bg-gradient-to-br from-retro-gold-50/80 via-retro-gold-100/90 to-retro-beige-50/80',
   nextPhase: null,
   requiresTeams: true,
 };

@@ -17,6 +17,7 @@ model Tournament {
   createdAt DateTime @default(now())
   players   Player[]
   teams     Team[]
+  matches   Match[]
 }
 
 model Player {
@@ -37,5 +38,43 @@ model Team {
   tournamentId String
   players      Player[]
   createdAt    DateTime @default(now())
+}
+
+model Match {
+  id           String   @id @default(cuid())
+  matchKey     String   // e.g., "swiss-1-1" or "ko-QF-1"
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String
+  team1Id      String?
+  team2Id      String?
+  phase        String   // "swiss" or "ko"
+  round        String?
+  createdAt    DateTime @default(now())
+  results      MatchResult[]
+  
+  @@unique([tournamentId, matchKey])
+  @@index([tournamentId])
+}
+
+model MatchResult {
+  id           String   @id @default(cuid())
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  matchId      String
+  reportedBy   String   // Telegram User ID or "admin"
+  teamId       String?  // Which team reported (team1 or team2)
+  score        String   // e.g., "6-4, 6-3"
+  winnerId     String?  // Team ID of winner
+  duration     String?  // e.g., "45min"
+  status       String   @default("pending") // "pending", "confirmed", "disputed", "resolved"
+  confirmedBy  String?  // Telegram User ID who confirmed (opposing team)
+  resolvedBy   String?  // Admin Telegram User ID who resolved dispute
+  resolvedScore String? // Final score after admin resolution
+  resolvedWinnerId String? // Final winner after admin resolution
+  createdAt    DateTime @default(now())
+  confirmedAt  DateTime?
+  resolvedAt  DateTime?
+  
+  @@index([matchId])
+  @@index([status])
 }
 

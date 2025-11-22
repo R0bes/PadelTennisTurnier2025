@@ -5,6 +5,7 @@ import VerticalLine from './VerticalLine';
 
 interface TypingTextProps {
   text: string;
+  secondaryText?: string;
   className?: string;
   faded?: boolean;
   showCursor?: boolean;
@@ -14,6 +15,7 @@ interface TypingTextProps {
 
 export default function TypingText({
   text,
+  secondaryText,
   className = '',
   faded = false,
   showCursor = true,
@@ -24,6 +26,12 @@ export default function TypingText({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const previousTextRef = useRef<string>('');
   const mountedRef = useRef(true);
+  
+  // Determine which text to display
+  // Only use secondaryText if it's explicitly provided AND faded is true
+  // Otherwise always use the primary text
+  const activeText = (faded && secondaryText) ? secondaryText : text;
+  const isShowingSecondary = faded && !!secondaryText;
 
   // Reset on unmount/remount
   useEffect(() => {
@@ -45,9 +53,9 @@ export default function TypingText({
     }
 
     // Update previous text ref
-    previousTextRef.current = text;
+    previousTextRef.current = activeText;
 
-    if (!text || text.length === 0) {
+    if (!activeText || activeText.length === 0) {
       setDisplayedText('');
       return;
     }
@@ -67,8 +75,8 @@ export default function TypingText({
       }
 
       // Use the current text value from closure
-      if (currentIndex < text.length) {
-        setDisplayedText(text.slice(0, currentIndex + 1));
+      if (currentIndex < activeText.length) {
+        setDisplayedText(activeText.slice(0, currentIndex + 1));
         currentIndex++;
       } else {
         if (intervalRef.current) {
@@ -87,9 +95,9 @@ export default function TypingText({
         intervalRef.current = null;
       }
     };
-  }, [text, typingSpeed, onComplete]);
+  }, [activeText, typingSpeed, onComplete]);
 
-  if (!text || text.length === 0) {
+  if (!activeText || activeText.length === 0) {
     return null;
   }
 
@@ -109,16 +117,18 @@ export default function TypingText({
         <HorizontalLine delay={0.4} />
 
         {/* Text with typing effect */}
-        <p className={`text-3xl font-bold ${
-          faded
-            ? 'text-gray-300 opacity-50'
-            : 'bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent'
-        } ${className}`}>
+        <p className={`text-4xl font-retro font-bold uppercase tracking-wider ${
+          isShowingSecondary
+            ? 'text-retro-brown-300 opacity-50'
+            : faded
+            ? 'text-retro-brown-300 opacity-50'
+            : 'bg-gradient-to-r from-retro-brown-600 via-retro-orange-500 to-retro-brown-600 bg-clip-text text-transparent'
+        } ${className}`} style={{ textShadow: '0 2px 4px rgba(255,255,255,0.5)' }}>
           {displayedText}
           {showCursor &&
             displayedText.length > 0 &&
-            displayedText.length < text.length &&
-            !faded && (
+            displayedText.length < activeText.length &&
+            !isShowingSecondary && (
               <span className="animate-pulse">|</span>
             )}
         </p>

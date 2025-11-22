@@ -1247,6 +1247,797 @@ fastify.get<{ Params: { id: string } }>(
   }
 );
 
+// Report match result
+fastify.post<{
+  Params: { id: string };
+  Body: {
+    matchKey: string;
+    reportedBy: string; // Telegram User ID
+    score: string;
+    winnerId: string | null;
+    duration?: string;
+  };
+}>('/tournaments/:id/report-result', async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const { matchKey, reportedBy, score, winnerId, duration } = request.body;
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        teams: { include: { players: true } },
+        matches: {
+          where: { matchKey },
+          include: { results: true },
+        },
+      } as any,
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+      // Find or create match
+      let match = (tournament as any).matches?.[0];
+      if (!match) {
+        // Extract phase and round from matchKey
+        const phase = matchKey.startsWith('swiss') ? 'swiss' : 'ko';
+        const roundMatch = matchKey.match(/(swiss|ko)-(\w+)-(\d+)/);
+        const round = roundMatch ? roundMatch[2] : null;
+
+        match = await (prisma as any).match.create({
+        data: {
+          matchKey,
+          tournamentId: id,
+          phase,
+          round,
+        },
+      });
+    }
+
+    // Determine which team reported (team1 or team2)
+    let reportingTeamId: string | null = null;
+    if (match.team1Id && match.team2Id) {
+      // Check if reportedBy is a player in team1 or team2
+      const teams = (tournament as any).teams || [];
+      const team1 = teams.find((t: any) => t.id === match.team1Id);
+      const team2 = teams.find((t: any) => t.id === match.team2Id);
+      
+      const team1Players = (team1 as any)?.players || [];
+      const team2Players = (team2 as any)?.players || [];
+      
+      if (team1Players.some((p: any) => (p as any).telegramUsername === `user_${reportedBy}` || (p as any).telegramUsername?.endsWith(reportedBy))) {
+        reportingTeamId = match.team1Id;
+      } else if (team2Players.some((p: any) => (p as any).telegramUsername === `user_${reportedBy}` || (p as any).telegramUsername?.endsWith(reportedBy))) {
+        reportingTeamId = match.team2Id;
+      }
+    }
+
+    // Check for existing results
+    const existingResults = await (prisma as any).matchResult.findMany({
+      where: { matchId: match.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Check if there's a conflicting result from the other team
+    const conflictingResult = existingResults.find(
+      (r: any) => r.teamId !== reportingTeamId && r.status === 'pending'
+    );
+
+    let status = 'pending';
+    if (conflictingResult) {
+      // Check if scores match
+      if (conflictingResult.score !== score || conflictingResult.winnerId !== winnerId) {
+        status = 'disputed';
+        // Mark conflicting result as disputed too
+        await (prisma as any).matchResult.update({
+          where: { id: conflictingResult.id },
+          data: { status: 'disputed' },
+        });
+      } else {
+        // Scores match, auto-confirm
+        status = 'confirmed';
+        await (prisma as any).matchResult.update({
+          where: { id: conflictingResult.id },
+          data: { status: 'confirmed', confirmedBy: reportedBy, confirmedAt: new Date() },
+        });
+      }
+    }
+
+    // Create new result
+    const result = await (prisma as any).matchResult.create({
+      data: {
+        matchId: match.id,
+        reportedBy,
+        teamId: reportingTeamId,
+        score,
+        winnerId,
+        duration,
+        status,
+        confirmedBy: status === 'confirmed' ? conflictingResult?.reportedBy : null,
+        confirmedAt: status === 'confirmed' ? new Date() : null,
+      },
+      include: {
+        match: {
+          include: {
+            tournament: true,
+          },
+        },
+      },
+    });
+
+    // Check if KO round is completed and next round should start
+    if (tournament.phase === 'ko' && (status === 'confirmed' || status === 'resolved')) {
+      await checkAndBroadcastKORoundCompletion(tournament.id, match.phase, match.round);
+    }
+
+    return {
+      id: result.id,
+      matchKey: result.match.matchKey,
+      score: result.score,
+      winnerId: result.winnerId,
+      status: result.status,
+      needsConfirmation: status === 'pending' && !conflictingResult,
+      isDisputed: status === 'disputed',
+    };
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * Check if KO round is completed and broadcast next round start
+ */
+async function checkAndBroadcastKORoundCompletion(
+  tournamentId: string,
+  phase: string,
+  completedRound: string | null
+): Promise<void> {
+  if (phase !== 'ko' || !completedRound) return;
+
+  try {
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      include: {
+        players: true,
+        teams: {
+          include: { players: true },
+        },
+        matches: {
+          include: {
+            results: {
+              where: {
+                status: { in: ['confirmed', 'resolved'] },
+              },
+            },
+          },
+        },
+      } as any,
+    });
+
+    if (!tournament) return;
+
+    const roundNames: Record<string, string> = {
+      'Quarterfinals': 'QF',
+      'Semifinals': 'SF',
+      'Final': 'F',
+    };
+
+    const roundOrder = ['Quarterfinals', 'Semifinals', 'Final'];
+    const currentRoundIndex = roundOrder.indexOf(completedRound);
+    
+    if (currentRoundIndex === -1 || currentRoundIndex >= roundOrder.length - 1) {
+      return; // No next round
+    }
+
+    const currentRoundShort = roundNames[completedRound] || completedRound.charAt(0);
+    const matches = (tournament as any).matches || [];
+    
+    // Count matches in current round
+    const currentRoundMatches = matches.filter((m: any) => 
+      m.phase === 'ko' && m.round === completedRound
+    );
+
+    // Check if all matches in current round are completed
+    const allCompleted = currentRoundMatches.every((match: any) => {
+      const hasCompletedResult = (match.results || []).some(
+        (r: any) => r.status === 'confirmed' || r.status === 'resolved'
+      );
+      return hasCompletedResult;
+    });
+
+    if (allCompleted) {
+      const nextRound = roundOrder[currentRoundIndex + 1];
+      let broadcastMessage = '';
+
+      if (nextRound === 'Semifinals') {
+        broadcastMessage =
+          `🏆 *Halbfinale startet!*\n\n` +
+          `Tournament: *${tournament.name}*\n\n` +
+          `Die Viertelfinals sind abgeschlossen!\n` +
+          `Die Halbfinals beginnen jetzt! 🎾`;
+      } else if (nextRound === 'Final') {
+        broadcastMessage =
+          `🏆 *Finale startet!*\n\n` +
+          `Tournament: *${tournament.name}*\n\n` +
+          `Die Halbfinals sind abgeschlossen!\n` +
+          `Das große Finale beginnt jetzt! 🏆🎾`;
+      }
+
+      if (broadcastMessage) {
+        // Get all players with Telegram
+        const playersWithTelegram = tournament.players.filter(
+          (p: any) => p.telegramUsername
+        );
+
+        // Send broadcast (this would need to be called from bot context)
+        // For now, we'll emit an event or store it for the bot to pick up
+        // In a real implementation, you'd use a message queue or webhook
+        fastify.log.info(`KO Round completed: ${completedRound}, next: ${nextRound}`);
+        fastify.log.info(`Broadcast message: ${broadcastMessage}`);
+        fastify.log.info(`Recipients: ${playersWithTelegram.length}`);
+      }
+    }
+  } catch (error) {
+    fastify.log.error(error, 'Error checking KO round completion');
+  }
+}
+
+// Confirm match result (by opposing team)
+fastify.post<{
+  Params: { id: string; resultId: string };
+  Body: {
+    confirmedBy: string; // Telegram User ID
+    confirmed: boolean; // true to confirm, false to dispute
+  };
+}>('/tournaments/:id/results/:resultId/confirm', async (request, reply) => {
+  try {
+    const { id, resultId } = request.params;
+    const { confirmedBy, confirmed } = request.body;
+
+    const result = await (prisma as any).matchResult.findUnique({
+      where: { id: resultId },
+      include: {
+        match: {
+          include: {
+            tournament: true,
+            results: true,
+          },
+        },
+      },
+    });
+
+    if (!result || result.match.tournamentId !== id) {
+      return reply.code(404).send({ error: 'Result not found' });
+    }
+
+    if (result.status !== 'pending') {
+      return reply.code(400).send({ error: 'Result is not pending confirmation' });
+    }
+
+    if (confirmed) {
+      // Confirm the result
+      await prisma.matchResult.update({
+        where: { id: resultId },
+        data: {
+          status: 'confirmed',
+          confirmedBy,
+          confirmedAt: new Date(),
+        },
+      });
+
+      // Also confirm any other pending results for this match with same score
+      await (prisma as any).matchResult.updateMany({
+        where: {
+          matchId: result.matchId,
+          score: result.score,
+          winnerId: result.winnerId,
+          status: 'pending',
+        },
+        data: {
+          status: 'confirmed',
+          confirmedBy,
+          confirmedAt: new Date(),
+        },
+      });
+    } else {
+      // Dispute the result
+      await prisma.matchResult.update({
+        where: { id: resultId },
+        data: { status: 'disputed' },
+      });
+
+      // Mark all pending results for this match as disputed
+      await (prisma as any).matchResult.updateMany({
+        where: {
+          matchId: result.matchId,
+          status: 'pending',
+        },
+        data: { status: 'disputed' },
+      });
+    }
+
+    return { success: true, status: confirmed ? 'confirmed' : 'disputed' };
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Resolve disputed match (by admin)
+fastify.post<{
+  Params: { id: string; resultId: string };
+  Body: {
+    resolvedBy: string; // Admin Telegram User ID
+    score: string;
+    winnerId: string | null;
+  };
+}>('/tournaments/:id/results/:resultId/resolve', async (request, reply) => {
+  try {
+    const { id, resultId } = request.params;
+    const { resolvedBy, score, winnerId } = request.body;
+
+    const result = await (prisma as any).matchResult.findUnique({
+      where: { id: resultId },
+      include: {
+        match: {
+          include: {
+            tournament: true,
+          },
+        },
+      },
+    });
+
+    if (!result || result.match.tournamentId !== id) {
+      return reply.code(404).send({ error: 'Result not found' });
+    }
+
+    if (result.status !== 'disputed') {
+      return reply.code(400).send({ error: 'Result is not disputed' });
+    }
+
+    // Resolve all disputed results for this match
+    await prisma.matchResult.updateMany({
+      where: {
+        matchId: result.matchId,
+        status: 'disputed',
+      },
+      data: {
+        status: 'resolved',
+        resolvedBy,
+        resolvedScore: score,
+        resolvedWinnerId: winnerId,
+        resolvedAt: new Date(),
+      },
+    });
+
+    return { success: true, status: 'resolved' };
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Get pending confirmations for a player
+fastify.get<{
+  Params: { id: string };
+  Query: { playerId: string };
+}>('/tournaments/:id/pending-confirmations', async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const { playerId } = request.query as { playerId: string };
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        teams: {
+          include: { players: true },
+        },
+        matches: {
+          include: {
+            results: {
+              where: { status: 'pending' },
+            },
+          },
+        },
+      } as any,
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+    // Find player's team
+    const teams = (tournament as any).teams || [];
+    const player = teams
+      .flatMap((t: any) => t.players || [])
+      .find((p: any) => p.id === playerId);
+
+    if (!player) {
+      return reply.code(404).send({ error: 'Player not found' });
+    }
+
+    const playerTeam = teams.find((t: any) => (t.players || []).some((p: any) => p.id === playerId));
+    if (!playerTeam) {
+      return [];
+    }
+
+    // Find matches where opponent reported a result
+    const matches = (tournament as any).matches || [];
+    const pendingConfirmations = matches
+      .filter((match: any) => {
+        const results = (match.results || []);
+        const hasPendingResult = results.some((r: any) => r.status === 'pending');
+        if (!hasPendingResult) return false;
+
+        // Check if this match involves player's team
+        return (match.team1Id === playerTeam.id || match.team2Id === playerTeam.id) &&
+               results.some((r: any) => r.teamId !== playerTeam.id);
+      })
+      .map((match: any) => {
+        const results = (match.results || []);
+        const pendingResult = results.find((r: any) => r.status === 'pending');
+        return {
+          resultId: pendingResult!.id,
+          matchKey: match.matchKey,
+          score: pendingResult!.score,
+          winnerId: pendingResult!.winnerId,
+          reportedBy: pendingResult!.reportedBy,
+        };
+      });
+
+    return pendingConfirmations;
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Get player statistics
+fastify.get<{
+  Params: { id: string; playerId: string };
+}>('/tournaments/:id/players/:playerId/stats', async (request, reply) => {
+  try {
+    const { id, playerId } = request.params;
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        teams: {
+          include: { players: true },
+        },
+        matches: {
+          include: {
+            results: {
+              where: {
+                status: { in: ['confirmed', 'resolved'] },
+              },
+            },
+          },
+        },
+      } as any,
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+    const player = (tournament as any).teams
+      .flatMap((t: any) => t.players || [])
+      .find((p: any) => p.id === playerId);
+
+    if (!player) {
+      return reply.code(404).send({ error: 'Player not found' });
+    }
+
+    const playerTeam = (tournament as any).teams.find((t: any) =>
+      (t.players || []).some((p: any) => p.id === playerId)
+    );
+
+    if (!playerTeam) {
+      return {
+        matchesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        points: 0,
+      };
+    }
+
+    // Calculate statistics from confirmed/resolved match results
+    const matches = (tournament as any).matches || [];
+    let matchesPlayed = 0;
+    let wins = 0;
+    let losses = 0;
+
+    for (const match of matches) {
+      if (match.team1Id !== playerTeam.id && match.team2Id !== playerTeam.id) {
+        continue;
+      }
+
+      const confirmedResult = (match.results || []).find(
+        (r: any) => r.status === 'confirmed' || r.status === 'resolved'
+      );
+
+      if (confirmedResult) {
+        matchesPlayed++;
+        const winnerId = confirmedResult.resolvedWinnerId || confirmedResult.winnerId;
+        if (winnerId === playerTeam.id) {
+          wins++;
+        } else {
+          losses++;
+        }
+      }
+    }
+
+    const winRate = matchesPlayed > 0 ? (wins / matchesPlayed) * 100 : 0;
+    // Simple points calculation: 3 points per win, 1 point per loss
+    const points = wins * 3 + losses * 1;
+
+    return {
+      playerId: player.id,
+      playerName: player.name,
+      teamId: playerTeam.id,
+      teamName: playerTeam.name,
+      matchesPlayed,
+      wins,
+      losses,
+      winRate: Math.round(winRate * 10) / 10,
+      points,
+    };
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Get leaderboard (players or teams)
+fastify.get<{
+  Params: { id: string };
+  Query: { type?: 'players' | 'teams' };
+}>('/tournaments/:id/leaderboard', async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const { type = 'players' } = request.query as { type?: 'players' | 'teams' };
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        players: true,
+        teams: {
+          include: { players: true },
+        },
+        matches: {
+          include: {
+            results: {
+              where: {
+                status: { in: ['confirmed', 'resolved'] },
+              },
+            },
+          },
+        },
+      } as any,
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+    if (type === 'teams') {
+      const teams = (tournament as any).teams || [];
+      const matches = (tournament as any).matches || [];
+      const teamStats = teams.map((team: any) => {
+        let matchesPlayed = 0;
+        let wins = 0;
+        let losses = 0;
+
+        for (const match of matches) {
+          if (match.team1Id !== team.id && match.team2Id !== team.id) {
+            continue;
+          }
+
+          const confirmedResult = (match.results || []).find(
+            (r: any) => r.status === 'confirmed' || r.status === 'resolved'
+          );
+
+          if (confirmedResult) {
+            matchesPlayed++;
+            const winnerId = confirmedResult.resolvedWinnerId || confirmedResult.winnerId;
+            if (winnerId === team.id) {
+              wins++;
+            } else {
+              losses++;
+            }
+          }
+        }
+
+        const winRate = matchesPlayed > 0 ? (wins / matchesPlayed) * 100 : 0;
+        const points = wins * 3 + losses * 1;
+
+        return {
+          id: team.id,
+          name: team.name,
+          matchesPlayed,
+          wins,
+          losses,
+          winRate: Math.round(winRate * 10) / 10,
+          points,
+        };
+      });
+
+      return teamStats.sort((a: any, b: any) => b.points - a.points || b.winRate - a.winRate);
+    } else {
+      // Player leaderboard
+      const players = tournament.players;
+      const teams = (tournament as any).teams || [];
+      const matches = (tournament as any).matches || [];
+      const playerStats = players.map((player: any) => {
+        const playerTeam = teams.find((t: any) =>
+          (t.players || []).some((p: any) => p.id === player.id)
+        );
+
+        if (!playerTeam) {
+          return {
+            playerId: player.id,
+            playerName: player.name,
+            matchesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            winRate: 0,
+            points: 0,
+          };
+        }
+
+        let matchesPlayed = 0;
+        let wins = 0;
+        let losses = 0;
+
+        for (const match of matches) {
+          if (match.team1Id !== playerTeam.id && match.team2Id !== playerTeam.id) {
+            continue;
+          }
+
+          const confirmedResult = (match.results || []).find(
+            (r: any) => r.status === 'confirmed' || r.status === 'resolved'
+          );
+
+          if (confirmedResult) {
+            matchesPlayed++;
+            const winnerId = confirmedResult.resolvedWinnerId || confirmedResult.winnerId;
+            if (winnerId === playerTeam.id) {
+              wins++;
+            } else {
+              losses++;
+            }
+          }
+        }
+
+        const winRate = matchesPlayed > 0 ? (wins / matchesPlayed) * 100 : 0;
+        const points = wins * 3 + losses * 1;
+
+        return {
+          playerId: player.id,
+          playerName: player.name,
+          teamId: playerTeam.id,
+          teamName: playerTeam.name,
+          matchesPlayed,
+          wins,
+          losses,
+          winRate: Math.round(winRate * 10) / 10,
+          points,
+        };
+      });
+
+      return playerStats.sort((a: any, b: any) => b.points - a.points || b.winRate - a.winRate);
+    }
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Get podium (top 3)
+fastify.get<{
+  Params: { id: string };
+  Query: { type?: 'players' | 'teams' };
+}>('/tournaments/:id/podium', async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const { type = 'players' } = request.query as { type?: 'players' | 'teams' };
+
+    // Reuse leaderboard logic
+    const leaderboard = await fastify.inject({
+      method: 'GET',
+      url: `/tournaments/${id}/leaderboard?type=${type}`,
+    });
+
+    if (leaderboard.statusCode !== 200) {
+      return reply.code(leaderboard.statusCode).send(JSON.parse(leaderboard.body));
+    }
+
+    const allStats = JSON.parse(leaderboard.body);
+    const top3 = allStats.slice(0, 3);
+
+    return top3.map((stat: any, index: number) => ({
+      position: index + 1,
+      ...stat,
+    }));
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Broadcast message to all players (admin only)
+fastify.post<{
+  Params: { id: string };
+  Body: {
+    message: string;
+    sentBy: string; // Admin Telegram User ID
+  };
+}>('/tournaments/:id/broadcast', async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const { message, sentBy } = request.body;
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        players: true,
+      },
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+    // Get all players with Telegram usernames
+    const playersWithTelegram = tournament.players.filter(
+      (p: any) => p.telegramUsername
+    );
+
+    return {
+      success: true,
+      message,
+      sentBy,
+      recipientsCount: playersWithTelegram.length,
+      recipients: playersWithTelegram.map((p: any) => ({
+        playerId: p.id,
+        playerName: p.name,
+        telegramUsername: p.telegramUsername,
+      })),
+    };
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 const start = async () => {
   try {
     await fastify.listen({ port: 4000, host: '0.0.0.0' });

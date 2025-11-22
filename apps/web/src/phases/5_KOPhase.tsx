@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { LayoutGroup } from 'framer-motion';
+import { useMemo, useState } from 'react';
+import { LayoutGroup, AnimatePresence, motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { Trophy, Play } from 'lucide-react';
 import type { TournamentState, Team } from '@tournament-app/shared-types';
@@ -13,6 +13,7 @@ interface KOPhaseProps {
   teams: Team[];
   matchResults: Record<string, { score: string; winner: string | null; duration?: string }>;
   onMatchResultUpdate: (results: Record<string, { score: string; winner: string | null; duration?: string }>) => void;
+  matchDurationMinutes?: number;
 }
 
 export default function KOPhase({
@@ -20,7 +21,9 @@ export default function KOPhase({
   teams,
   matchResults,
   onMatchResultUpdate,
+  matchDurationMinutes = 10,
 }: KOPhaseProps) {
+  const MATCH_DURATION = matchDurationMinutes * 60; // Convert minutes to seconds
   // Generate KO bracket with results and winner advancement
   const koBracket = useMemo(() => {
     const bracket = generateKOBracket(teams);
@@ -180,9 +183,44 @@ export default function KOPhase({
   };
 
   // KO Bracket View Component
-  const KOBracketView = ({ tournamentState, teams, koBracket, matchResults, nextMatchKey, onNextMatch }: any) => (
-    <LayoutGroup>
-      <div className="space-y-8">
+  const KOBracketView = ({ tournamentState, teams, koBracket, matchResults, nextMatchKey, onNextMatch }: any) => {
+    const [roundTransitionKey, setRoundTransitionKey] = useState(0);
+    
+    // Update transition key when a round is completed
+    useMemo(() => {
+      if (koBracket) {
+        let lastCompletedRound = -1;
+        for (let roundIdx = 0; roundIdx < koBracket.length; roundIdx++) {
+          const round = koBracket[roundIdx];
+          const roundNames: Record<string, string> = {
+            Quarterfinals: 'QF',
+            Semifinals: 'SF',
+            Final: 'F',
+          };
+          const roundShort = roundNames[round.round] || round.round.charAt(0);
+          
+          const allMatchesCompleted = round.matches.every((match: any, matchIdx: number) => {
+            const matchKey = `ko-${roundShort}-${matchIdx + 1}`;
+            return matchResults[matchKey] && matchResults[matchKey].winner;
+          });
+          
+          if (allMatchesCompleted) {
+            lastCompletedRound = roundIdx;
+          } else {
+            break;
+          }
+        }
+        
+        // Trigger transition if a new round becomes visible
+        if (lastCompletedRound >= 0 && lastCompletedRound < koBracket.length - 1) {
+          setRoundTransitionKey((prev) => prev + 1);
+        }
+      }
+    }, [koBracket, matchResults]);
+    
+    return (
+      <LayoutGroup>
+        <div className="space-y-8">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
@@ -206,8 +244,9 @@ export default function KOPhase({
               <Trophy className="w-4 h-4" />
               Knockout Bracket
             </h3>
-            <div className="space-y-6">
-              {koBracket.map((round: any, roundIdx: number) => {
+            <AnimatePresence mode="wait">
+              <div key={roundTransitionKey} className="space-y-6">
+                {koBracket.map((round: any, roundIdx: number) => {
                 const roundNames: Record<string, string> = {
                   Quarterfinals: 'QF',
                   Semifinals: 'SF',
@@ -218,7 +257,14 @@ export default function KOPhase({
                 const nextRound = koBracket[roundIdx + 1];
 
                 return (
-                    <div key={roundIdx} className="relative">
+                    <motion.div
+                      key={roundIdx}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.4, delay: roundIdx * 0.1 }}
+                      className="relative"
+                    >
                       <h4 className="text-sm font-semibold text-gray-700 mb-3">
                       {round.round}
                     </h4>
@@ -331,25 +377,36 @@ export default function KOPhase({
                           </svg>
                         </div>
                       )}
-                  </div>
-                );
-              })}
+                    </motion.div>
+                  );
+                })}
               </div>
+            </AnimatePresence>
             </div>
           </div>
         </div>
       </LayoutGroup>
-  );
+    );
+  };
 
-  if (!koBracket) {
-    return null;
-  }
+  // Empty state view when no bracket available
+  const EmptyKOView = () => (
+    <div className="bg-gradient-to-br from-retro-cyan-50/80 to-white/90 rounded-lg shadow-retro border-2 border-retro-cyan-200/60 p-8 text-center">
+      <Trophy className="w-16 h-16 text-retro-cyan-400 mx-auto mb-4 opacity-50" />
+      <h3 className="text-xl font-retro font-bold text-retro-brown-800 mb-2 uppercase tracking-wider">
+        Knockout Bracket
+      </h3>
+      <p className="text-retro-brown-600 font-vintage">
+        Das KO-Bracket wird angezeigt, sobald die Swiss-Runden abgeschlossen sind.
+      </p>
+    </div>
+  );
 
   const phaseViews: PhaseViewElement[] = [
     {
       type: 'view',
-      component: KOBracketView,
-      className: 'mt-8 pt-8 border-t-2 border-gray-200',
+      component: koBracket ? KOBracketView : EmptyKOView,
+      className: koBracket ? 'mt-8 pt-8 border-t-2 border-gray-200' : '',
     },
   ];
 
@@ -375,7 +432,7 @@ export const koPhaseConfig: PhaseConfig = {
   id: 'ko',
   title: 'Knockout',
   description: 'Knockout-Bracket wird gespielt',
-  backgroundColor: 'bg-orange-50',
+  backgroundColor: 'bg-gradient-to-br from-retro-cyan-50/80 via-retro-cyan-100/90 to-retro-blue-50/80',
   nextPhase: 'summary',
   requiresTeams: true,
   requiresMatches: true,

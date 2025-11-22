@@ -171,3 +171,174 @@ export async function getReadyMatches(
   return data;
 }
 
+export interface MatchResultReport {
+  id: string;
+  matchKey: string;
+  score: string;
+  winnerId: string | null;
+  status: 'pending' | 'confirmed' | 'disputed' | 'resolved';
+  needsConfirmation: boolean;
+  isDisputed: boolean;
+}
+
+export interface PendingConfirmation {
+  resultId: string;
+  matchKey: string;
+  score: string;
+  winnerId: string | null;
+  reportedBy: string;
+}
+
+export async function reportMatchResult(
+  tournamentId: string,
+  matchKey: string,
+  reportedBy: string,
+  score: string,
+  winnerId: string | null,
+  duration?: string
+): Promise<MatchResultReport> {
+  const data = await fetchJson<MatchResultReport>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/report-result`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        matchKey,
+        reportedBy,
+        score,
+        winnerId,
+        duration,
+      }),
+    }
+  );
+  return data;
+}
+
+export async function confirmMatchResult(
+  tournamentId: string,
+  resultId: string,
+  confirmedBy: string,
+  confirmed: boolean
+): Promise<{ success: boolean; status: string }> {
+  const data = await fetchJson<{ success: boolean; status: string }>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/results/${resultId}/confirm`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        confirmedBy,
+        confirmed,
+      }),
+    }
+  );
+  return data;
+}
+
+export async function resolveDisputedMatch(
+  tournamentId: string,
+  resultId: string,
+  resolvedBy: string,
+  score: string,
+  winnerId: string | null
+): Promise<{ success: boolean; status: string }> {
+  const data = await fetchJson<{ success: boolean; status: string }>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/results/${resultId}/resolve`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        resolvedBy,
+        score,
+        winnerId,
+      }),
+    }
+  );
+  return data;
+}
+
+export async function getPendingConfirmations(
+  tournamentId: string,
+  playerId: string
+): Promise<PendingConfirmation[]> {
+  const data = await fetchJson<PendingConfirmation[]>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/pending-confirmations?playerId=${playerId}`
+  );
+  return data;
+}
+
+export interface PlayerStats {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  teamName: string;
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  points: number;
+}
+
+export interface LeaderboardEntry {
+  playerId?: string;
+  playerName?: string;
+  teamId?: string;
+  teamName?: string;
+  id?: string;
+  name?: string;
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  points: number;
+}
+
+export async function getPlayerStats(
+  tournamentId: string,
+  playerId: string
+): Promise<PlayerStats> {
+  const data = await fetchJson<PlayerStats>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/players/${playerId}/stats`
+  );
+  return data;
+}
+
+export async function getLeaderboard(
+  tournamentId: string,
+  type: 'players' | 'teams' = 'players'
+): Promise<LeaderboardEntry[]> {
+  const data = await fetchJson<LeaderboardEntry[]>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/leaderboard?type=${type}`
+  );
+  return data;
+}
+
+export async function getPodium(
+  tournamentId: string,
+  type: 'players' | 'teams' = 'players'
+): Promise<Array<LeaderboardEntry & { position: number }>> {
+  const data = await fetchJson<Array<LeaderboardEntry & { position: number }>>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/podium?type=${type}`
+  );
+  return data;
+}
+
+export async function broadcastMessage(
+  tournamentId: string,
+  message: string,
+  sentBy: string
+): Promise<{
+  success: boolean;
+  recipientsCount: number;
+  recipients: Array<{ playerId: string; playerName: string; telegramUsername: string }>;
+}> {
+  const data = await fetchJson<{
+    success: boolean;
+    recipientsCount: number;
+    recipients: Array<{ playerId: string; playerName: string; telegramUsername: string }>;
+  }>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/broadcast`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ message, sentBy }),
+    }
+  );
+  return data;
+}
+

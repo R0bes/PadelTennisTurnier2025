@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { LucideIcon } from 'lucide-react';
 
-export type ButtonColor = 'blue' | 'green' | 'orange' | 'red' | 'gray' | 'yellow';
+export type ButtonColor = 'blue' | 'green' | 'orange' | 'red' | 'gray' | 'yellow' | 'purple' | 'cyan' | 'gold';
 
 export interface BaseButtonProps {
   text: string;
@@ -18,18 +18,18 @@ export interface BaseButtonProps {
 
 const colorClasses: Record<ButtonColor, { bg: string; hover: string; text: string }> = {
   blue: {
-    bg: 'bg-blue-500',
-    hover: 'hover:bg-blue-600',
+    bg: 'bg-retro-blue-400/90',
+    hover: 'hover:bg-retro-blue-500/90',
     text: 'text-white',
   },
   green: {
-    bg: 'bg-green-500',
-    hover: 'hover:bg-green-600',
+    bg: 'bg-retro-tennis-green-light',
+    hover: 'hover:bg-retro-tennis-green',
     text: 'text-white',
   },
   orange: {
-    bg: 'bg-orange-500',
-    hover: 'hover:bg-orange-600',
+    bg: 'bg-retro-orange-400/90',
+    hover: 'hover:bg-retro-orange-500/90',
     text: 'text-white',
   },
   red: {
@@ -38,21 +38,36 @@ const colorClasses: Record<ButtonColor, { bg: string; hover: string; text: strin
     text: 'text-white',
   },
   gray: {
-    bg: 'bg-gray-200',
-    hover: 'hover:bg-gray-300',
-    text: 'text-gray-700',
+    bg: 'bg-retro-brown-200',
+    hover: 'hover:bg-retro-brown-300',
+    text: 'text-retro-brown-700',
   },
   yellow: {
-    bg: 'bg-yellow-500',
-    hover: 'hover:bg-yellow-600',
+    bg: 'bg-retro-yellow-400/90',
+    hover: 'hover:bg-retro-yellow-500/90',
+    text: 'text-retro-brown-800',
+  },
+  purple: {
+    bg: 'bg-retro-purple-400/90',
+    hover: 'hover:bg-retro-purple-500/90',
     text: 'text-white',
+  },
+  cyan: {
+    bg: 'bg-retro-cyan-400/90',
+    hover: 'hover:bg-retro-cyan-500/90',
+    text: 'text-white',
+  },
+  gold: {
+    bg: 'bg-retro-gold-400/90',
+    hover: 'hover:bg-retro-gold-500/90',
+    text: 'text-retro-brown-800',
   },
 };
 
 const sizeClasses = {
-  sm: 'px-4 py-2 text-sm',
-  md: 'px-6 py-3 text-base',
-  lg: 'px-8 py-4 text-lg',
+  sm: 'px-4 py-2 text-base',
+  md: 'px-6 py-3 text-lg',
+  lg: 'px-8 py-4 text-xl',
 };
 
 export default function BaseButton({
@@ -73,7 +88,7 @@ export default function BaseButton({
 
   const baseClasses = `
     flex items-center justify-center gap-2
-    rounded-md font-medium
+    rounded-md font-retro font-bold uppercase tracking-wider
     transition-all
     ${sizeClass}
     ${colorClass.text}

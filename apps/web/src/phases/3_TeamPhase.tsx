@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import type { TournamentState } from '@tournament-app/shared-types';
 import { getPhaseNumber, PhaseEnum } from '@tournament-app/shared-types';
 import { createTeam, assignPlayerToTeam, registerPlayer, getTournamentState } from '../api/tournamentApi';
-import { generateTeamName } from '@tournament-app/shared-utils';
+import { generateTeamName, isDummyPlayer } from '@tournament-app/shared-utils';
 import TeamCard from '../components/TeamCard';
 import TeamGhostCard from '../components/TeamGhostCard';
 import type { PhaseConfig, PhaseViewElement } from './PhaseInterface';
@@ -41,7 +41,7 @@ export default function TeamPhase({
         isCreatingTeamsRef.current = true;
 
         const unassignedPlayers = tournamentState.players.filter(
-          (player) => player.name !== 'DummyPlayer'
+          (player) => !isDummyPlayer(player)
         );
 
         if (unassignedPlayers.length === 0) {
@@ -129,7 +129,7 @@ export default function TeamPhase({
   if (!tournamentState.teams || tournamentState.teams.length === 0) {
     // Still render the view elements, just show empty state
     const EmptyTeamView = () => (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-gradient-to-br from-retro-purple-50/70 to-white/90 rounded-lg shadow-retro border-2 border-retro-purple-200/60 p-6">
         <div className="text-center py-12">
           <p className="text-gray-500 text-lg">Teams werden erstellt...</p>
         </div>
@@ -147,7 +147,7 @@ export default function TeamPhase({
       {
         type: 'view',
         component: EmptyTeamView,
-        className: 'bg-white rounded-lg shadow p-6',
+        className: 'bg-gradient-to-br from-retro-purple-50/70 to-white/90 rounded-lg shadow-retro border-2 border-retro-purple-200/60 p-6',
       },
     ];
 
@@ -185,8 +185,7 @@ export default function TeamPhase({
     const isInSwissPhase = currentPhaseNumber === PhaseEnum.Swiss;
     
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
           <AnimatePresence mode="popLayout">
             {tournamentState.teams.map((team: any) => {
               const teamPlayers = tournamentState.players.filter((player: any) =>
@@ -198,7 +197,7 @@ export default function TeamPhase({
               // The normal card transitions to match cards, the ghost card appears at the same position
               if (isInMatch && isInSwissPhase) {
                 return (
-                  <div key={team.id} className="relative">
+                  <div key={team.id} className="relative z-10">
                     {/* Normal card that transitions to match cards */}
                     <TeamCard
                       team={team}
@@ -210,7 +209,7 @@ export default function TeamPhase({
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.5, delay: 0.2 }}
-                      className="absolute inset-0 pointer-events-none"
+                      className="absolute inset-0 pointer-events-none z-5"
                     >
                       <TeamGhostCard
                         team={team}
@@ -244,7 +243,6 @@ export default function TeamPhase({
             })}
           </AnimatePresence>
         </div>
-      </div>
     );
   };
 
@@ -259,7 +257,7 @@ export default function TeamPhase({
     {
       type: 'view',
       component: TeamView,
-      className: 'bg-white rounded-lg shadow p-6',
+      className: 'bg-gradient-to-br from-retro-purple-50/70 to-white/90 rounded-lg shadow-retro border-2 border-retro-purple-200/60 p-6',
     },
     {
       type: 'verticalLine',
@@ -269,7 +267,7 @@ export default function TeamPhase({
       type: 'button',
       text: (state) => `${state.teams?.length || 0} ${(state.teams?.length || 0) === 1 ? 'Team' : 'Teams'}`,
       onClick: (_state, props) => props.onNextPhase(),
-      color: 'green',
+      color: 'purple',
       active: (state, props) => !!props.getNextPhase() && !props.isLoading && (state.teams?.length || 0) > 0 && props.phaseButtonClicked !== 'team',
       disabled: (_state, props) => props.phaseButtonClicked === 'team',
       title: 'Zur nächsten Phase wechseln',
@@ -298,7 +296,7 @@ export const teamPhaseConfig: PhaseConfig = {
   id: 'team',
   title: 'Teambuilding',
   description: 'Teams werden erstellt und Spieler zugewiesen',
-  backgroundColor: 'bg-green-50',
+  backgroundColor: 'bg-gradient-to-br from-retro-purple-50/80 via-retro-purple-100/90 to-retro-purple-50/80',
   nextPhase: 'swiss',
   requiresTeams: true,
 };
