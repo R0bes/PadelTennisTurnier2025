@@ -133,7 +133,7 @@ export default function MatchResultModal({
                 className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all font-semibold text-lg shadow-lg flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-5 h-5" />
-                Ergebnis bestätigen
+                Übernehmen
               </button>
             </motion.div>
           </motion.div>

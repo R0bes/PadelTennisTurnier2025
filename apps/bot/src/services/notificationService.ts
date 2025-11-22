@@ -135,7 +135,13 @@ export async function getReadyMatches(
   tournamentId: string
 ): Promise<ReadyMatch[]> {
   const { getReadyMatches: apiGetReadyMatches } = await import('../api/client.js');
-  return await apiGetReadyMatches(tournamentId);
+  const matches = await apiGetReadyMatches(tournamentId);
+  // Ensure playerIds and telegramUserIds are always arrays
+  return matches.map(match => ({
+    ...match,
+    playerIds: match.playerIds || [],
+    telegramUserIds: match.telegramUserIds || [],
+  }));
 }
 
 /**

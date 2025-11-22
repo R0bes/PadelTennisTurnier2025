@@ -222,14 +222,17 @@ export async function handleSubmitResult(
     // Notify opponent if confirmation is needed
     if (result.needsConfirmation) {
       const { notifyOpponentResultReported } = await import('../services/notificationService.js');
-      const playerTeam = getPlayerTeam(tournamentState, player.id);
-      if (playerTeam) {
-        await notifyOpponentResultReported(
-          ctx.api as any, // Bot instance
-          tournamentState,
-          matchKey,
-          playerTeam.id
-        );
+      const player = getPlayerByTelegramId(tournamentState, userId);
+      if (player) {
+        const playerTeam = getPlayerTeam(tournamentState, player.id);
+        if (playerTeam) {
+          await notifyOpponentResultReported(
+            ctx.api as any, // Bot instance
+            tournamentState,
+            matchKey,
+            playerTeam.id
+          );
+        }
       }
 
       const { InlineKeyboard } = await import('grammy');

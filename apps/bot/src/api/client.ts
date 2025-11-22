@@ -28,7 +28,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
     try {
-      const error = await response.json();
+      const error: any = await response.json();
       errorMessage = error.error || errorMessage;
     } catch {
       try {
@@ -160,6 +160,8 @@ export interface ReadyMatch {
   team2: { id: string; name: string; playerIds: string[] } | null;
   phase: 'swiss' | 'ko';
   round?: string;
+  playerIds?: string[];
+  telegramUserIds?: number[];
 }
 
 export async function getReadyMatches(

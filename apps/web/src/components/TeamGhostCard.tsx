@@ -6,6 +6,8 @@ interface TeamGhostCardProps {
   size?: 'default' | 'compact';
   players?: Player[];
   playerLayout?: 'vertical' | 'horizontal';
+  isWinner?: boolean;
+  isLoser?: boolean;
 }
 
 export default function TeamGhostCard({
@@ -13,15 +15,29 @@ export default function TeamGhostCard({
   size = 'default',
   players = [],
   playerLayout = 'vertical',
+  isWinner = false,
+  isLoser = false,
 }: TeamGhostCardProps) {
-  const isCompact = size === 'compact';
+  const isCompact = size === 'compact' || size === 'match';
   const isHorizontalPlayers = playerLayout === 'horizontal';
 
   return (
     <div className="relative">
       {/* NO layoutId - this is a ghost, should not animate */}
       <div
-        className={`bg-retro-beige-200/40 rounded-lg border-2 border-dashed border-retro-brown-400/50 transition-all ${
+        className={`${
+          isWinner
+            ? 'bg-gradient-to-br from-green-300/60 via-green-200/50 to-green-300/60'
+            : isLoser
+            ? 'bg-gradient-to-br from-red-300/60 via-red-200/50 to-red-300/60'
+            : 'bg-retro-beige-200/40'
+        } rounded-lg border-2 ${
+          isWinner
+            ? 'border-green-700/60 border-dashed'
+            : isLoser
+            ? 'border-red-700/60 border-dashed'
+            : 'border-dashed border-retro-brown-400/50'
+        } transition-all ${
           isCompact ? 'p-3' : 'p-4'
         }`}
       >

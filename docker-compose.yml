@@ -1,0 +1,49 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: padel-tournament-api:latest
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:80}
+    volumes:
+      - ./apps/api/prisma:/app/prisma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: padel-tournament-web:latest
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:4000}
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    image: padel-tournament-bot:latest
+    environment:
+      - NODE_ENV=production
+      - BOT_TOKEN=${BOT_TOKEN:-}
+      - API_BASE_URL=http://api:4000
+    depends_on:
+      - api
+    restart: unless-stopped
+

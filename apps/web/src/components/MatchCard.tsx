@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import type { Team, Player } from '@tournament-app/shared-types';
 import TeamCard from './TeamCard';
+import TeamGhostCard from './TeamGhostCard';
 
 interface MatchCardProps {
   matchNumber: string;
@@ -14,6 +15,7 @@ interface MatchCardProps {
   className?: string;
   phase?: 'swiss' | 'ko';
   roundNumber?: number; // For round-specific layoutId in Swiss rounds
+  isGhost?: boolean; // Show as ghost card when teams transition to next round
 }
 
 export default function MatchCard({
@@ -28,6 +30,7 @@ export default function MatchCard({
   className = '',
   phase,
   roundNumber,
+  isGhost = false,
 }: MatchCardProps) {
   const isMatchSetup = phase === 'swiss';
   const playerLayout = isMatchSetup ? 'vertical' : 'horizontal';
@@ -40,8 +43,14 @@ export default function MatchCard({
     <motion.div
       layout
       transition={{ type: 'spring', stiffness: 20, damping: 15, mass: 2 }}
-      className={`rounded-md p-2 pt-4 border-2 transition-all shadow-sm relative w-full min-w-[280px] ${
-        isIdle
+      className={`rounded-md p-2 pt-4 border-2 transition-all shadow-sm relative w-full min-w-[280px] h-full ${
+        isGhost
+          ? `opacity-60 border-dashed ${
+              isDone
+                ? 'bg-retro-beige-50/60 border-retro-brown-400/60'
+                : 'bg-retro-brown-50/60 border-retro-brown-400/60'
+            }`
+          : isIdle
           ? 'bg-retro-brown-100 border-retro-brown-400 opacity-60'
           : isReady
           ? 'bg-retro-yellow-200 border-retro-yellow-500 shadow-xl ring-2 ring-retro-yellow-400 animate-pulse'
@@ -72,16 +81,27 @@ export default function MatchCard({
           <div className="flex gap-2 items-stretch">
             {team1 ? (
               <div className="flex-1 min-w-0">
-                <TeamCard
-                  team={team1}
-                  size="match"
-                  players={players.filter((player) => team1.playerIds.includes(player.id))}
-                  isWinner={isDone && winner === team1}
-                  isLoser={isDone && winner !== team1 && winner !== null}
-                  playerLayout={playerLayout}
-                  showInitials={showInitials}
-                  roundNumber={roundNumber}
-                />
+                {isGhost ? (
+                  <TeamGhostCard
+                    team={team1}
+                    size="match"
+                    players={players.filter((player) => team1.playerIds.includes(player.id))}
+                    isWinner={isDone && winner?.id === team1.id}
+                    isLoser={isDone && winner?.id !== team1.id && winner !== null}
+                    playerLayout={playerLayout}
+                  />
+                ) : (
+                  <TeamCard
+                    team={team1}
+                    size="match"
+                    players={players.filter((player) => team1.playerIds.includes(player.id))}
+                    isWinner={isDone && winner?.id === team1.id}
+                    isLoser={isDone && winner?.id !== team1.id && winner !== null}
+                    playerLayout={playerLayout}
+                    showInitials={showInitials}
+                    roundNumber={roundNumber}
+                  />
+                )}
               </div>
             ) : (
               <div className="flex-1 min-w-0 rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 flex items-center justify-center min-h-[80px]">
@@ -98,16 +118,27 @@ export default function MatchCard({
 
             {team2 ? (
               <div className="flex-1 min-w-0">
-                <TeamCard
-                  team={team2}
-                  size="match"
-                  players={players.filter((player) => team2.playerIds.includes(player.id))}
-                  isWinner={isDone && winner === team2}
-                  isLoser={isDone && winner !== team2 && winner !== null}
-                  playerLayout={playerLayout}
-                  showInitials={showInitials}
-                  roundNumber={roundNumber}
-                />
+                {isGhost ? (
+                  <TeamGhostCard
+                    team={team2}
+                    size="match"
+                    players={players.filter((player) => team2.playerIds.includes(player.id))}
+                    isWinner={isDone && winner?.id === team2.id}
+                    isLoser={isDone && winner?.id !== team2.id && winner !== null}
+                    playerLayout={playerLayout}
+                  />
+                ) : (
+                  <TeamCard
+                    team={team2}
+                    size="match"
+                    players={players.filter((player) => team2.playerIds.includes(player.id))}
+                    isWinner={isDone && winner?.id === team2.id}
+                    isLoser={isDone && winner?.id !== team2.id && winner !== null}
+                    playerLayout={playerLayout}
+                    showInitials={showInitials}
+                    roundNumber={roundNumber}
+                  />
+                )}
               </div>
             ) : (
               <div className="flex-1 min-w-0 rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 flex items-center justify-center min-h-[80px]">
@@ -155,16 +186,27 @@ export default function MatchCard({
         <div className="space-y-1.5">
           {team1 ? (
             <div className="min-h-[80px]">
-              <TeamCard
-                team={team1}
-                size="match"
-                players={players.filter((player) => team1.playerIds.includes(player.id))}
-                isWinner={isDone && winner === team1}
-                isLoser={isDone && winner !== team1 && winner !== null}
-                playerLayout={playerLayout}
-                showInitials={showInitials}
-                roundNumber={roundNumber}
-              />
+              {isGhost ? (
+                <TeamGhostCard
+                  team={team1}
+                  size="match"
+                  players={players.filter((player) => team1.playerIds.includes(player.id))}
+                  isWinner={isDone && winner?.id === team1.id}
+                  isLoser={isDone && winner?.id !== team1.id && winner !== null}
+                  playerLayout={playerLayout}
+                />
+              ) : (
+                <TeamCard
+                  team={team1}
+                  size="match"
+                  players={players.filter((player) => team1.playerIds.includes(player.id))}
+                  isWinner={isDone && winner?.id === team1.id}
+                  isLoser={isDone && winner?.id !== team1.id && winner !== null}
+                  playerLayout={playerLayout}
+                  showInitials={showInitials}
+                  roundNumber={roundNumber}
+                />
+              )}
             </div>
           ) : (
             <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 min-h-[80px] flex items-center justify-center">
@@ -197,16 +239,27 @@ export default function MatchCard({
 
           {team2 ? (
             <div className="min-h-[80px]">
-              <TeamCard
-                team={team2}
-                size="match"
-                players={players.filter((player) => team2.playerIds.includes(player.id))}
-                isWinner={isDone && winner === team2}
-                isLoser={isDone && winner !== team2 && winner !== null}
-                playerLayout={playerLayout}
-                showInitials={showInitials}
-                roundNumber={roundNumber}
-              />
+              {isGhost ? (
+                <TeamGhostCard
+                  team={team2}
+                  size="match"
+                  players={players.filter((player) => team2.playerIds.includes(player.id))}
+                  isWinner={isDone && winner?.id === team2.id}
+                  isLoser={isDone && winner?.id !== team2.id && winner !== null}
+                  playerLayout={playerLayout}
+                />
+              ) : (
+                <TeamCard
+                  team={team2}
+                  size="match"
+                  players={players.filter((player) => team2.playerIds.includes(player.id))}
+                  isWinner={isDone && winner?.id === team2.id}
+                  isLoser={isDone && winner?.id !== team2.id && winner !== null}
+                  playerLayout={playerLayout}
+                  showInitials={showInitials}
+                  roundNumber={roundNumber}
+                />
+              )}
             </div>
           ) : (
             <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 min-h-[80px] flex items-center justify-center">

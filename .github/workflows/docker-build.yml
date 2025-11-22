@@ -1,0 +1,127 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/padel-tournament
+
+jobs:
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        service:
+          - name: api
+            context: .
+            dockerfile: apps/api/Dockerfile
+            port: 4000
+          - name: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+            port: 80
+          - name: bot
+            context: .
+            dockerfile: apps/bot/Dockerfile
+            port: 3001
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Image digest
+        run: echo ${{ steps.meta.outputs.tags }}
+
+  test-images:
+    name: Test Docker Images
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+
+    strategy:
+      matrix:
+        service:
+          - name: api
+            port: 4000
+          - name: web
+            port: 80
+          - name: bot
+            port: 3001
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/${{ matrix.service.name }}/Dockerfile
+          push: false
+          tags: padel-tournament-${{ matrix.service.name }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test image
+        run: |
+          docker run --rm -d --name test-${{ matrix.service.name }} \
+            -p ${{ matrix.service.port }}:${{ matrix.service.port }} \
+            padel-tournament-${{ matrix.service.name }}:test || true
+          sleep 5
+          docker ps -a | grep test-${{ matrix.service.name }}
+          docker stop test-${{ matrix.service.name }} || true
+

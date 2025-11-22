@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import HorizontalLine from './HorizontalLine';
 import VerticalLine from './VerticalLine';
 
 interface TypingTextProps {
@@ -106,17 +105,13 @@ export default function TypingText({
       {/* Vertical line above */}
       <VerticalLine delay={0} className="mb-4" />
 
-      {/* Horizontal container with lines and text */}
+      {/* Text with typing effect */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}
-        className="flex items-center gap-6"
+        className="flex items-center justify-center"
       >
-        {/* Left horizontal line */}
-        <HorizontalLine delay={0.4} />
-
-        {/* Text with typing effect */}
         <p className={`text-4xl font-retro font-bold uppercase tracking-wider ${
           isShowingSecondary
             ? 'text-retro-brown-300 opacity-50'
@@ -132,9 +127,6 @@ export default function TypingText({
               <span className="animate-pulse">|</span>
             )}
         </p>
-
-        {/* Right horizontal line */}
-        <HorizontalLine delay={0.4} />
       </motion.div>
 
       {/* Vertical line below */}

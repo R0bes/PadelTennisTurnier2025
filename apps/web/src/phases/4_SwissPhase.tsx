@@ -7,7 +7,6 @@ import { isDummyPlayer } from '@tournament-app/shared-utils';
 import MatchCard from '../components/MatchCard';
 import MatchResultModal from '../components/MatchResultModal';
 import LiveMatchOverlay from '../components/LiveMatchOverlay';
-import TeamGhostCard from '../components/TeamGhostCard';
 import type { PhaseConfig, PhaseViewElement } from './PhaseInterface';
 import PhaseViewRenderer from './PhaseViewRenderer';
 
@@ -187,9 +186,32 @@ export default function SwissPhase({
     allRounds[1] = firstRoundMatches;
     
     // Swiss-Pairing for rounds 2 and 3
+    // Only fill rounds if previous round is complete
     for (let round = 2; round <= 3; round++) {
       const previousRound = round - 1;
       const previousRoundMatches = allRounds[previousRound];
+      
+      // Check if previous round is complete
+      const previousRoundComplete = previousRoundMatches?.every((match, idx) => {
+        if (!match.team1 || !match.team2) return false; // Empty matches mean round not started
+        const matchKey = `swiss-${previousRound}-${idx + 1}`;
+        const result = matchResults[matchKey];
+        return !!(result && result.score && result.winner);
+      });
+      
+      // If previous round is not complete, create empty matches
+      if (!previousRoundComplete) {
+        const emptyMatches: Array<{ team1: Team | null; team2: Team | null; score?: string; filled?: boolean; winner?: Team | null }> = [];
+        for (let i = 0; i < numMatches; i++) {
+          emptyMatches.push({
+            team1: null,
+            team2: null,
+            filled: false,
+          });
+        }
+        allRounds[round] = emptyMatches;
+        continue;
+      }
       
       // Calculate team statistics from previous round
       const teamStats = new Map<string, { wins: number; losses: number; points: number }>();
@@ -839,7 +861,7 @@ export default function SwissPhase({
                         Round {roundNum}
                         {isActiveRound && <span className="ml-2 text-sm font-normal">(Aktive Runde)</span>}
                       </h4>
-                      <div className="flex gap-4 justify-between flex-wrap">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
                         {typedMatches.map((match: any, idx: number) => {
                         const matchKey = `swiss-${roundNum}-${idx + 1}`;
                         const result = matchResults[matchKey];
@@ -856,9 +878,13 @@ export default function SwissPhase({
                         // Check if teams are transitioning to next round
                         const team1Transitioning = match.team1 ? isTeamTransitioning(match.team1.id, roundNumInt) : false;
                         const team2Transitioning = match.team2 ? isTeamTransitioning(match.team2.id, roundNumInt) : false;
+                        const isMatchTransitioning = (team1Transitioning || team2Transitioning) && isDone;
+                        
+                        // Determine winner for match card
+                        const winnerTeam = result?.winner ? teams.find((t: any) => t.id === result.winner) || null : null;
 
                         return (
-                          <div key={idx} className="flex-1 min-w-[280px] max-w-[350px] relative">
+                          <div key={idx} className="relative w-full h-full flex flex-col">
                             <MatchCard
                               matchNumber={`${roundNum}-${idx + 1}`}
                               team1={match.team1}
@@ -866,47 +892,12 @@ export default function SwissPhase({
                               players={tournamentState.players}
                               score={result?.score}
                               duration={result?.duration}
-                              winner={
-                                result?.winner
-                                  ? teams.find((t: any) => t.id === result.winner) || null
-                                  : null
-                              }
-                              state={matchState}
+                              winner={winnerTeam}
+                              state={isMatchTransitioning ? 'done' : matchState}
                               phase="swiss"
                               roundNumber={roundNumInt}
+                              isGhost={isMatchTransitioning}
                             />
-                            
-                            {/* Ghost cards for transitioning teams in old round - positioned over team cards */}
-                            {team1Transitioning && match.team1 && (
-                              <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ duration: 0.5, delay: 0.2 }}
-                                className="absolute top-[60px] left-[8px] right-[50%] pointer-events-none z-5"
-                                style={{ marginRight: '4px' }}
-                              >
-                                <TeamGhostCard
-                                  team={match.team1}
-                                  players={tournamentState.players.filter((p: any) => match.team1.playerIds.includes(p.id))}
-                                  playerLayout="vertical"
-                                />
-                              </motion.div>
-                            )}
-                            {team2Transitioning && match.team2 && (
-                              <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ duration: 0.5, delay: 0.2 }}
-                                className="absolute top-[60px] left-[50%] right-[8px] pointer-events-none z-5"
-                                style={{ marginLeft: '4px' }}
-                              >
-                                <TeamGhostCard
-                                  team={match.team2}
-                                  players={tournamentState.players.filter((p: any) => match.team2.playerIds.includes(p.id))}
-                                  playerLayout="vertical"
-                                />
-                              </motion.div>
-                            )}
                           </div>
                         );
                         })}

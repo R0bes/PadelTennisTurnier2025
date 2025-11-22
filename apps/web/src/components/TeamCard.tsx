@@ -45,7 +45,7 @@ export default function TeamCard({
             : isLoser
             ? 'bg-gradient-to-br from-red-300 via-red-200 to-red-300'
             : players.length > 0
-            ? 'bg-gradient-to-br from-retro-tennis-green-light via-retro-tennis-court to-retro-tennis-court-dark'
+            ? 'bg-gradient-to-br from-retro-beige-300 via-retro-beige-200 to-retro-beige-100'
             : 'bg-retro-brown-300'
         } rounded-lg border-2 ${
           isWinner
@@ -53,7 +53,7 @@ export default function TeamCard({
             : isLoser
             ? 'border-red-700 shadow-md'
             : players.length > 0
-            ? 'border-retro-brown-600 hover:border-retro-tennis-green'
+            ? 'border-retro-brown-600 hover:border-retro-brown-700'
             : 'border-retro-brown-500'
         } hover:shadow-retro transition-all ${
           isCompact ? 'p-2 h-full flex flex-col' : 'p-2.5 flex flex-col'
@@ -64,7 +64,7 @@ export default function TeamCard({
             : isLoser
             ? '0 5px 18px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.8)'
             : players.length > 0 
-            ? '0 4px 12px rgba(45, 80, 22, 0.3), inset 0 1px 0 rgba(255,255,255,0.8)' 
+            ? '0 4px 12px rgba(95, 70, 56, 0.3), inset 0 1px 0 rgba(255,255,255,0.8)' 
             : '0 3px 8px rgba(95, 70, 56, 0.25)',
         }}
       >

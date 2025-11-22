@@ -234,7 +234,9 @@ bot.callbackQuery(/^phase_(player|team|swiss|ko|summary)_(\d+)$/, async (ctx) =>
   if (match) {
     const phase = match[1] as any;
     // Simulate command with phase argument
-    ctx.message = { ...ctx.message, text: `/phase ${phase}` } as any;
+    if (ctx.message && 'text' in ctx.message) {
+      (ctx.message as any).text = `/phase ${phase}`;
+    }
     await handlePhase(ctx);
   }
 });
@@ -249,7 +251,7 @@ bot.callbackQuery(/^help_(general|player|admin|register|confirmations|match|stat
 
 // Start notification service
 let notificationInterval: NodeJS.Timeout | null = null;
-bot.start().then(() => {
+bot.start().then(async () => {
   console.log('Bot is running...');
   
   // Start notification service (check every 30 seconds)
