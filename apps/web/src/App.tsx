@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion, LayoutGroup } from 'framer-motion';
-import { Trophy, RotateCcw, Home, Users, Users2, Zap, Medal, Award, Play } from 'lucide-react';
+import { Trophy, RotateCcw, Users, Zap, Medal, Award, Play } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Phase, TournamentState, Team } from '@tournament-app/shared-types';
 import { generateKOBracket, generateTeamName } from '@tournament-app/shared-utils';
@@ -32,8 +32,12 @@ function App() {
   const [newTournamentName, setNewTournamentName] = useState('Padel Tennis Turnier 2025');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  // Store match results: { 'swiss-1-1': { score: '6-4', winner: teamId }, 'ko-QF-1': { score: '6-3', winner: teamId } }
-  const [matchResults, setMatchResults] = useState<Record<string, { score: string; winner: string | null }>>({});
+  const [phaseButtonClicked, setPhaseButtonClicked] = useState<string | null>(null);
+  const [matchesReady, setMatchesReady] = useState(false);
+  // Store match results: { 'swiss-1-1': { score: '6-4', winner: teamId, duration: '45min' }, 'ko-QF-1': { score: '6-3', winner: teamId, duration: '38min' } }
+  const [matchResults, setMatchResults] = useState<Record<string, { score: string; winner: string | null; duration?: string }>>({});
+  const [displayedText, setDisplayedText] = useState('');
+  const [textAnimationStarted, setTextAnimationStarted] = useState(false);
 
   // Load tournament on mount (only if exists in localStorage)
   useEffect(() => {
@@ -65,6 +69,37 @@ function App() {
 
     loadTournament();
   }, []);
+
+  // Typing effect for "Die Anmeldung ist eröffnet ..."
+  useEffect(() => {
+    const fullText = 'Die Anmeldung ist eröffnet ...';
+    if (tournamentState && tournamentState.phase === 'registration' && tournamentState.players.length > 0) {
+      if (!textAnimationStarted) {
+        // Start animation only once
+        setTextAnimationStarted(true);
+        setDisplayedText('');
+        let currentIndex = 0;
+        
+        const typingInterval = setInterval(() => {
+          if (currentIndex < fullText.length) {
+            setDisplayedText(fullText.slice(0, currentIndex + 1));
+            currentIndex++;
+          } else {
+            clearInterval(typingInterval);
+          }
+        }, 50); // 50ms per character
+
+        return () => clearInterval(typingInterval);
+      } else if (displayedText.length === 0) {
+        // If animation was completed but text was reset, restore full text immediately
+        setDisplayedText(fullText);
+      }
+    } else {
+      // Reset when leaving registration phase or no players
+      setDisplayedText('');
+      setTextAnimationStarted(false);
+    }
+  }, [tournamentState?.phase, tournamentState?.players.length, textAnimationStarted]);
 
   // Refresh tournament state
   const refreshTournament = async () => {
@@ -101,8 +136,14 @@ function App() {
     try {
       // Auto-generate teams when transitioning from registration to team_setup
       if (tournamentState.phase === 'registration' && newPhase === 'team_setup') {
-        await handleAutoGenerateTeams();
-        return; // handleAutoGenerateTeams already changes the phase
+        await handlePhaseTransitionToTeams();
+        return; // handlePhaseTransitionToTeams already changes the phase
+      }
+
+      // Two-stage transition from team_setup to match_setup
+      if (tournamentState.phase === 'team_setup' && newPhase === 'match_setup') {
+        await handlePhaseTransitionToMatches();
+        return; // handlePhaseTransitionToMatches already changes the phase
       }
 
       const updated = await setPhase(tournamentState.id, newPhase);
@@ -118,13 +159,123 @@ function App() {
     }
   };
 
+  // Two-stage phase transition: first show empty teams, then assign players
+  const handlePhaseTransitionToTeams = async () => {
+    if (!tournamentState) return;
+
+    const unassignedPlayers = tournamentState.players.filter(
+      (player) => player.name !== 'Dummy Player'
+    );
+
+    if (unassignedPlayers.length === 0) {
+      toast.error('No players available to create teams');
+      return;
+    }
+
+    if (isGenerating) return;
+
+    let loadingToast: string | undefined;
+    try {
+      setIsGenerating(true);
+      
+      // Show loading message
+      loadingToast = toast.loading('Teams werden erstellt...', {
+        duration: 5000,
+      });
+
+      // Calculate number of teams needed
+      let numTeams = Math.ceil(unassignedPlayers.length / 2);
+      if (numTeams % 2 !== 0) {
+        numTeams += 1;
+      }
+
+      // Stage 1: Generate empty teams and change phase to show them
+      const createdTeams = await generateTeams(tournamentState.id, numTeams);
+      await setPhase(tournamentState.id, 'team_setup');
+      await refreshTournament();
+
+      // Wait a bit for the empty teams to render
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Stage 2: Assign players to teams
+      const totalSlots = numTeams * 2;
+      const dummyPlayersNeeded = Math.max(0, totalSlots - unassignedPlayers.length);
+      await assignPlayersToTeams(tournamentState.id, createdTeams, unassignedPlayers);
+
+      // Final refresh to show players assigned to teams
+      await refreshTournament();
+
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToast);
+      toast.success(
+        `${numTeams} Teams erstellt${dummyPlayersNeeded > 0 ? ` mit ${dummyPlayersNeeded} Dummy Player(s)` : ''}!`
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to generate teams';
+      if (loadingToast) toast.dismiss(loadingToast);
+      toast.error(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Two-stage phase transition: first show empty match cards, then assign teams
+  const handlePhaseTransitionToMatches = async () => {
+    if (!tournamentState) return;
+
+    if (isGenerating) return;
+
+    let loadingToast: string | undefined;
+    try {
+      setIsGenerating(true);
+      setMatchesReady(false);
+      
+      // Show loading message
+      loadingToast = toast.loading('Matches werden erstellt...', {
+        duration: 3000,
+      });
+
+      // Stage 1: Change phase to match_setup to show empty match cards
+      await setPhase(tournamentState.id, 'match_setup');
+      await refreshTournament();
+
+            // Wait 1.5 seconds for empty match cards to render and be visible
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Stage 2: Teams will be automatically assigned to matches by the useMemo
+      // Just refresh to trigger the assignment
+      setMatchesReady(true);
+      await refreshTournament();
+
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToast);
+      toast.success('Matches erfolgreich erstellt!');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to generate matches';
+      if (loadingToast) toast.dismiss(loadingToast);
+      toast.error(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // Handle next phase shift
   const handleNextPhase = async () => {
     if (!tournamentState) return;
     
+    // If in registration phase and no players yet, add fake players first
+    if (tournamentState.phase === 'registration' && tournamentState.players.length === 0) {
+      await addFakePlayers(tournamentState.id);
+      await refreshTournament();
+    }
+    
     const nextPhase = getNextPhase(tournamentState.phase);
     if (nextPhase) {
+      setPhaseButtonClicked(tournamentState.phase);
       await handlePhaseChange(nextPhase);
+      // Button stays disabled after being clicked
     }
   };
 
@@ -284,53 +435,6 @@ function App() {
     await Promise.all(assignPromises);
   };
 
-  // Auto-generate teams (orchestrates team generation and player assignment)
-  const handleAutoGenerateTeams = async () => {
-    if (!tournamentState) return;
-
-    const unassignedPlayers = tournamentState.players.filter(
-      (player) => player.name !== 'Dummy Player'
-    );
-
-    if (unassignedPlayers.length === 0) {
-      toast.error('No players available to create teams');
-      return;
-    }
-
-    if (isGenerating) return;
-
-    try {
-      setIsGenerating(true);
-
-      // Calculate number of teams needed
-      let numTeams = Math.ceil(unassignedPlayers.length / 2);
-      if (numTeams % 2 !== 0) {
-        numTeams += 1;
-      }
-
-      // Step 1: Generate teams (create empty teams)
-      const createdTeams = await generateTeams(tournamentState.id, numTeams);
-
-      // Step 2: Assign players to teams
-      const totalSlots = numTeams * 2;
-      const dummyPlayersNeeded = Math.max(0, totalSlots - unassignedPlayers.length);
-      await assignPlayersToTeams(tournamentState.id, createdTeams, unassignedPlayers);
-
-      // Step 3: Refresh tournament state to show teams
-      await setPhase(tournamentState.id, 'team_setup');
-      await refreshTournament();
-
-      toast.success(
-        `Created ${numTeams} teams${dummyPlayersNeeded > 0 ? ` with ${dummyPlayersNeeded} Dummy Player(s)` : ''}!`
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to generate teams';
-      toast.error(message);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   // Quick add 26 fake players (streaming - one by one, simulating)
   const addFakePlayers = async (tournamentId: string) => {
@@ -427,10 +531,8 @@ function App() {
       localStorage.setItem(TOURNAMENT_ID_KEY, newTournament.id);
       setTournamentState(newTournament);
       setError(null);
-      
-      setTimeout(async () => {
-        await addFakePlayers(newTournament.id);
-      }, 500);
+      setPhaseButtonClicked(null);
+      // Don't add fake players automatically - wait for Start button click
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to create tournament';
@@ -442,7 +544,25 @@ function App() {
   };
 
   // All hooks must be called before early returns (Rules of Hooks)
-  const currentPhase = tournamentState?.phase || 'registration';
+  const currentPhase: Phase = tournamentState?.phase || 'registration';
+  
+  // Get phase title for header
+  const getPhaseTitle = (phase: Phase): string => {
+    switch (phase) {
+      case 'registration':
+        return 'Anmeldung zum Turnier - letzte Chance!';
+      case 'team_setup':
+        return 'Teambuilding';
+      case 'match_setup':
+        return 'Matches';
+      case 'swiss_rounds':
+        return 'Swiss Rounds';
+      case 'ko_bracket':
+        return 'Knockout';
+      case 'summary':
+        return 'Summary';
+    }
+  };
   
   const phasesReached = useMemo(() => {
     if (!tournamentState) return [];
@@ -501,7 +621,8 @@ function App() {
       }
       
       // Only place teams in matches if phase is match_setup or swiss_rounds (not in team_setup)
-      if (tournamentState.phase === 'match_setup' || tournamentState.phase === 'swiss_rounds') {
+      // Also check matchesReady flag for controlled transition
+      if ((tournamentState.phase === 'match_setup' || tournamentState.phase === 'swiss_rounds') && matchesReady) {
         // Place teams randomly in matches
         let teamIndex = 0;
         for (const matchIdx of shuffledMatchIndices) {
@@ -552,7 +673,7 @@ function App() {
       });
     }
     return allRounds;
-  }, [teams, tournamentState, matchResults]);
+  }, [teams, tournamentState, matchResults, matchesReady]);
 
   // Generate KO bracket with results
   const koBracket = useMemo(() => {
@@ -582,6 +703,47 @@ function App() {
       };
     });
   }, [teams, matchResults]);
+
+  // Find next match key
+  const nextMatchKey = useMemo(() => {
+    if (!tournamentState) return null;
+
+    // Check Swiss rounds first
+    if (tournamentState.phase === 'swiss_rounds' && swissMatches) {
+      for (const [roundNum, matches] of Object.entries(swissMatches)) {
+        for (let idx = 0; idx < matches.length; idx++) {
+          const match = matches[idx];
+          const matchKey = `swiss-${roundNum}-${idx + 1}`;
+          if (match.team1 && match.team2 && !matchResults[matchKey]) {
+            return matchKey;
+          }
+        }
+      }
+    }
+
+    // Check KO bracket if no Swiss match found
+    if (koBracket && (tournamentState.phase === 'swiss_rounds' || tournamentState.phase === 'ko_bracket')) {
+      for (let roundIdx = 0; roundIdx < koBracket.length; roundIdx++) {
+        const round = koBracket[roundIdx];
+        const roundNames: Record<string, string> = {
+          'Quarterfinals': 'QF',
+          'Semifinals': 'SF',
+          'Final': 'F'
+        };
+        const roundShort = roundNames[round.round] || round.round.charAt(0);
+        
+        for (let matchIdx = 0; matchIdx < round.matches.length; matchIdx++) {
+          const match = round.matches[matchIdx];
+          const matchKey = `ko-${roundShort}-${matchIdx + 1}`;
+          if (match.team1 && match.team2 && !matchResults[matchKey]) {
+            return matchKey;
+          }
+        }
+      }
+    }
+
+    return null;
+  }, [tournamentState, swissMatches, koBracket, matchResults]);
 
   // Summary data
   const topPlayers = tournamentState?.players.slice(0, 3) || [];
@@ -662,61 +824,8 @@ function App() {
       className={`min-h-screen transition-colors duration-500 ${phaseBackground}`}
       initial={false}
       animate={{ backgroundColor: phaseBackground }}
+      style={{ minHeight: '100vh' }}
     >
-      <nav className="sticky top-0 z-50 bg-white shadow-md border-b">
-        <div className="max-w-full mx-auto px-2 sm:px-4 lg:px-6">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Trophy className="w-6 h-6 text-blue-600" />
-              <div>
-                <h1 className="text-lg font-bold text-gray-900">
-                  {tournamentState.name}
-                </h1>
-                <span className="text-xs text-gray-500 capitalize flex items-center gap-1">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  {currentPhase.replace('_', ' ')}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleResetToInitial}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm font-medium shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Neues Turnier starten"
-              >
-                <Home className="w-4 h-4" />
-                Reset
-              </button>
-              {isAdmin && tournamentState && (
-                <>
-                  {(currentPhase === 'swiss_rounds' || currentPhase === 'ko_bracket') && (
-                    <button
-                      onClick={handleNextMatch}
-                      disabled={isLoading}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-sm font-medium shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Nächstes Match simulieren"
-                    >
-                      <Play className="w-4 h-4" />
-                      Next Match
-                    </button>
-                  )}
-                  <button
-                    onClick={handleNextPhase}
-                    disabled={!getNextPhase(currentPhase) || isLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-medium shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Zur nächsten Phase wechseln"
-                  >
-                    Phase Shift
-                    <span>→</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
-
       {error && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4">
           <div className="max-w-full mx-auto px-2 sm:px-4 lg:px-6">
@@ -725,26 +834,112 @@ function App() {
         </div>
       )}
 
-      <main className="max-w-full mx-auto px-2 sm:px-4 lg:px-6 py-8">
-        <LayoutGroup>
-          <div className="space-y-8">
-            {/* Registration Section */}
-            {phasesReached.includes('registration') && (
+            <main className="max-w-full mx-auto px-2 sm:px-4 lg:px-6 pt-20 pb-8 min-h-screen">
+              <LayoutGroup>
+                <div className="space-y-8">
+                  {/* Start and Reset Buttons */}
+                  {currentPhase === 'registration' && (
+                    <div className="flex flex-col items-center mb-4">
+                      <div className="w-0.5 h-12 bg-gray-300 mb-4"></div>
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={handleNextPhase}
+                          disabled={isLoading || tournamentState?.players.length > 0 || phaseButtonClicked === 'registration'}
+                          className="px-6 py-3 bg-orange-500 text-white rounded-md hover:bg-orange-600 text-base font-medium shadow-sm hover:shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Turnier starten"
+                        >
+                          Start
+                        </button>
+                        <button
+                          onClick={handleResetToInitial}
+                          disabled={isLoading}
+                          className="flex items-center justify-center w-10 h-10 bg-red-500 text-white rounded-md hover:bg-red-600 shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Neues Turnier starten"
+                        >
+                          <RotateCcw className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Reset Button for other phases */}
+                  {currentPhase !== 'registration' && tournamentState && (
+                    <div className="flex flex-col items-center mb-4">
+                      <div className="w-0.5 h-12 bg-gray-300 mb-4"></div>
+                      <button
+                        onClick={handleResetToInitial}
+                        disabled={isLoading}
+                        className="flex items-center justify-center w-10 h-10 bg-red-500 text-white rounded-md hover:bg-red-600 shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Neues Turnier starten"
+                      >
+                        <RotateCcw className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
+                  {/* Registration Section - only show after Start button is clicked */}
+                  {phasesReached.includes('registration') && tournamentState && tournamentState.players.length > 0 && (
               <motion.div
                 id="phase-registration"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
               >
                 <div className="space-y-6">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                      <Users className="w-5 h-5" />
-                      Registered Players ({tournamentState.players.length})
-                    </h2>
+                  <div className="flex flex-col items-center justify-center mb-4">
+                    {/* Vertical line above */}
+                    <motion.div
+                      initial={{ opacity: 0, scaleY: 0 }}
+                      animate={{ opacity: 1, scaleY: 1 }}
+                      transition={{ duration: 0.3, delay: 0 }}
+                      className="w-0.5 h-12 bg-gray-300 mb-4"
+                    ></motion.div>
+                    
+                    {/* Horizontal container with lines and text */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: 0.2 }}
+                      className="flex items-center gap-6"
+                    >
+                      {/* Left horizontal line */}
+                      <motion.div
+                        initial={{ opacity: 0, scaleX: 0 }}
+                        animate={{ opacity: 1, scaleX: 1 }}
+                        transition={{ duration: 0.3, delay: 0.4 }}
+                        className="w-24 h-0.5 bg-gray-300"
+                      ></motion.div>
+                      
+                      {/* Text with typing effect */}
+                      <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent">
+                        {displayedText}
+                        {displayedText.length > 0 && displayedText.length < 'Die Anmeldung ist eröffnet ...'.length && (
+                          <span className="animate-pulse">|</span>
+                        )}
+                      </p>
+                      
+                      {/* Right horizontal line */}
+                      <motion.div
+                        initial={{ opacity: 0, scaleX: 0 }}
+                        animate={{ opacity: 1, scaleX: 1 }}
+                        transition={{ duration: 0.3, delay: 0.4 }}
+                        className="w-24 h-0.5 bg-gray-300"
+                      ></motion.div>
+                    </motion.div>
+                    
+                    {/* Vertical line below */}
+                    <motion.div
+                      initial={{ opacity: 0, scaleY: 0 }}
+                      animate={{ opacity: 1, scaleY: 1 }}
+                      transition={{ duration: 0.3, delay: 0.6 }}
+                      className="w-0.5 h-12 bg-gray-300 mt-4"
+                    ></motion.div>
                   </div>
-
-                  <div className="bg-white rounded-lg shadow p-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.8 }}
+                    className="bg-white rounded-lg shadow p-6 relative"
+                  >
                     {tournamentState.players.length === 0 ? (
                       <div className="text-center py-12">
                         <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -755,98 +950,168 @@ function App() {
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
-                        <AnimatePresence mode="popLayout">
-                          {tournamentState.players.map((player) =>
-                            player.teamId ? (
-                              <PlayerGhostCard key={player.id} player={player} layout="horizontal" />
-                            ) : (
-                              <PlayerCard
-                                key={player.id}
-                                player={player}
-                                isAdmin={isAdmin}
-                                onDelete={handleDeletePlayer}
-                                isDeleting={isDeleting === player.id}
-                                layout="horizontal"
-                              />
-                            )
-                          )}
-                        </AnimatePresence>
-                      </div>
+                      <>
+                        {phaseButtonClicked === 'registration' && (
+                          <div className="flex justify-center mb-4">
+                            <button
+                              onClick={handleNextPhase}
+                              disabled={!getNextPhase(currentPhase) || isLoading || tournamentState.players.length === 0}
+                              className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-base font-medium shadow-sm hover:shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                              title="Zur nächsten Phase wechseln"
+                            >
+                              {tournamentState.players.length} {tournamentState.players.length === 1 ? 'Teilnehmer' : 'Teilnehmer'}
+                            </button>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
+                          <AnimatePresence mode="popLayout">
+                            {tournamentState.players.map((player) =>
+                              player.teamId ? (
+                                <PlayerGhostCard key={player.id} player={player} layout="horizontal" />
+                              ) : (
+                                <PlayerCard
+                                  key={player.id}
+                                  player={player}
+                                  isAdmin={isAdmin}
+                                  onDelete={handleDeletePlayer}
+                                  isDeleting={isDeleting === player.id}
+                                  layout="horizontal"
+                                />
+                              )
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </>
                     )}
-                  </div>
+                  </motion.div>
+                </div>
+              </motion.div>
+                  )}
 
                   {/* Teams Section */}
                   {(tournamentState.phase === 'team_setup' || tournamentState.phase === 'match_setup' || tournamentState.phase === 'swiss_rounds' || tournamentState.phase === 'ko_bracket') && 
                    tournamentState.teams && 
                    tournamentState.teams.length > 0 && (
                     <motion.section
-                      initial={{ opacity: 0, y: 40 }}
+                      initial={false}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
+                      className="mt-20"
                     >
-                      <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                          <Users2 className="w-5 h-5" />
-                          Teams ({tournamentState.teams.length})
-                        </h2>
-                      </div>
+                      <div className="bg-white rounded-lg shadow p-6 relative">
+                        {tournamentState.phase === 'team_setup' ? (
+                          <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3 pb-12">
+                              <AnimatePresence mode="popLayout">
+                                {tournamentState.teams.map((team) => {
+                                  const teamPlayers = tournamentState.players.filter((player) =>
+                                    team.playerIds.includes(player.id)
+                                  );
 
-                      <div className="bg-white rounded-lg shadow p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                          <AnimatePresence mode="popLayout">
-                            {tournamentState.teams.map((team) => {
-                              const teamPlayers = tournamentState.players.filter((player) =>
-                                team.playerIds.includes(player.id)
-                              );
-
-                              // Use TeamCard in team_setup, TeamGhostCard in later phases
-                              if (tournamentState.phase === 'team_setup') {
-                                return (
-                                  <TeamCard
-                                    key={team.id}
-                                    team={team}
-                                    players={teamPlayers}
-                                    playerLayout="horizontal"
-                                  />
-                                );
-                              } else {
-                                return (
-                                  <TeamGhostCard
-                                    key={team.id}
-                                    team={team}
-                                    players={teamPlayers}
-                                    playerLayout="horizontal"
-                                  />
-                                );
-                              }
-                            })}
-                          </AnimatePresence>
-                        </div>
+                                  return (
+                                    <TeamCard
+                                      key={team.id}
+                                      team={team}
+                                      players={teamPlayers}
+                                      playerLayout="horizontal"
+                                    />
+                                  );
+                                })}
+                              </AnimatePresence>
+                            </div>
+                            <div className="flex justify-center absolute bottom-0 left-0 right-0 -mb-6">
+                              <button
+                                onClick={handleNextPhase}
+                                disabled={!getNextPhase(currentPhase) || isLoading || tournamentState.teams.length === 0 || phaseButtonClicked === 'team_setup'}
+                                className="px-6 py-3 bg-green-500 text-white rounded-md hover:bg-green-600 text-base font-medium shadow-sm hover:shadow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                title="Zur nächsten Phase wechseln"
+                              >
+                                {tournamentState.teams.length} {tournamentState.teams.length === 1 ? 'Team' : 'Teams'}
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {/* Keep TeamCards visible during transition - they will animate to MatchCards */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3 pb-12">
+                              <AnimatePresence mode="popLayout">
+                                {tournamentState.teams.map((team) => {
+                                  const teamPlayers = tournamentState.players.filter((player) =>
+                                    team.playerIds.includes(player.id)
+                                  );
+                                  
+                                  // Check if this team is actually rendered in a match card
+                                  const isTeamInMatchCard = matchesReady && swissMatches && Object.values(swissMatches).some(round => 
+                                    round.some(match => (match.team1?.id === team.id || match.team2?.id === team.id) && match.team1 !== null && match.team2 !== null)
+                                  );
+                                  
+                                  // Show TeamCard if team is not yet in a match card (for animation)
+                                  // Show GhostCard if team is already in a match card
+                                  if (isTeamInMatchCard) {
+                                    return (
+                                      <TeamGhostCard
+                                        key={team.id}
+                                        team={team}
+                                        players={teamPlayers}
+                                        playerLayout="horizontal"
+                                      />
+                                    );
+                                  }
+                                  
+                                  // Team not yet in match card, show normal card for animation
+                                  return (
+                                    <TeamCard
+                                      key={team.id}
+                                      team={team}
+                                      players={teamPlayers}
+                                      playerLayout="horizontal"
+                                    />
+                                  );
+                                })}
+                              </AnimatePresence>
+                            </div>
+                            {phaseButtonClicked === 'team_setup' && (
+                              <div className="flex justify-center absolute bottom-0 left-0 right-0 -mb-6">
+                                <button
+                                  disabled={true}
+                                  className="px-6 py-3 bg-green-500 text-white rounded-md text-base font-medium shadow-sm transition-all opacity-40 cursor-not-allowed"
+                                  title="Zur nächsten Phase wechseln"
+                                >
+                                  {tournamentState.teams.length} {tournamentState.teams.length === 1 ? 'Team' : 'Teams'}
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     </motion.section>
                   )}
-                </div>
-              </motion.div>
-            )}
 
             {/* Matches Section - only show from match_setup phase onwards */}
             {(phasesReached.includes('match_setup') || phasesReached.includes('swiss_rounds') || phasesReached.includes('ko_bracket')) && (
               <motion.div
                 id="phase-swiss-rounds"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                initial={false}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
                 className="mt-8 pt-8 border-t-2 border-gray-200"
               >
                 <LayoutGroup>
                   <div className="space-y-8">
                     <div className="bg-white rounded-lg shadow-lg p-6">
-                      <div className="mb-6">
+                      <div className="mb-6 flex items-center justify-between">
                         <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
                           <Zap className="w-5 h-5" />
                           Tournament Matches
                         </h2>
+                        <button
+                          onClick={handleNextMatch}
+                          className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-base font-medium shadow-sm hover:shadow transition-all flex items-center gap-2"
+                          title="Nächstes Match simulieren"
+                        >
+                          <Play className="w-5 h-5" />
+                          <span>next Match</span>
+                        </button>
                       </div>
 
                       {teams.length < 2 && (
@@ -874,9 +1139,13 @@ function App() {
                                   </h4>
                                   <div className="flex gap-4 justify-between flex-wrap">
                                     {matches.map((match, idx) => {
-                                      const isFilled = !!(match.filled && match.team1 && match.team2);
-                                      const isCompleted = !!(match.score !== undefined && match.score !== null);
-                                      const winner = match.winner || null;
+                                      const matchKey = `swiss-${roundNum}-${idx + 1}`;
+                                      const result = matchResults[matchKey];
+                                      const isDone = !!(result && result.score && result.winner);
+                                      const isReady = nextMatchKey === matchKey && !isDone;
+                                      
+                                      // Determine match state
+                                      const matchState: 'idle' | 'ready' | 'done' = isDone ? 'done' : isReady ? 'ready' : 'idle';
                                       
                                       return (
                                         <div key={idx} className="flex-1 min-w-[280px] max-w-[350px]">
@@ -885,10 +1154,10 @@ function App() {
                                             team1={match.team1}
                                             team2={match.team2}
                                             players={tournamentState.players}
-                                            score={match.score}
-                                            winner={winner}
-                                            isFilled={isFilled}
-                                            isCompleted={isCompleted}
+                                            score={result?.score}
+                                            duration={result?.duration}
+                                            winner={result?.winner ? teams.find(t => t.id === result.winner) || null : null}
+                                            state={matchState}
                                             phase={tournamentState.phase === 'match_setup' ? 'match_setup' : tournamentState.phase === 'swiss_rounds' ? 'swiss_rounds' : 'ko_bracket'}
                                           />
                                         </div>
@@ -927,10 +1196,15 @@ function App() {
                                   
                                   <div className="flex gap-2 relative justify-center">
                                     {round.matches.map((match, matchIdx) => {
-                                      const isFilled = !!(match.team1 && match.team2);
-                                      const isCompleted = !!(match.winner !== undefined && match.winner !== null);
                                       const matchNumber = `${roundShort}-${matchIdx + 1}`;
+                                      const matchKey = `ko-${matchNumber}`;
+                                      const result = matchResults[matchKey];
+                                      const isDone = !!(result && result.score && result.winner);
+                                      const isReady = nextMatchKey === matchKey && !isDone;
                                       
+                                      // Determine match state
+                                      const matchState: 'idle' | 'ready' | 'done' = isDone ? 'done' : isReady ? 'ready' : 'idle';
+
                                       return (
                                         <div key={matchIdx} className="relative" style={{ width: '280px', flexShrink: 0 }}>
                                           <MatchCard
@@ -938,10 +1212,10 @@ function App() {
                                             team1={match.team1}
                                             team2={match.team2}
                                             players={tournamentState.players}
-                                            score={match.score}
-                                            winner={match.winner || null}
-                                            isFilled={isFilled}
-                                            isCompleted={isCompleted}
+                                            score={result?.score}
+                                            duration={result?.duration}
+                                            winner={result?.winner ? teams.find(t => t.id === result.winner) || null : null}
+                                            state={matchState}
                                             phase={tournamentState.phase === 'match_setup' ? 'match_setup' : tournamentState.phase === 'swiss_rounds' ? 'swiss_rounds' : 'ko_bracket'}
                                           />
                                         </div>
@@ -1026,7 +1300,7 @@ function App() {
                 id="phase-summary"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
                 className="mt-8 pt-8 border-t-2 border-gray-200"
               >
                 <div className="space-y-8">

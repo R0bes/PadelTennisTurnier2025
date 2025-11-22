@@ -7,8 +7,9 @@ export async function handleStart(ctx: Context) {
   
   if (username) {
     message += `Du bist als @${username} angemeldet.\n\n`;
-    message += `Um dich mit einem Turnier zu verknüpfen, verwende:\n`;
-    message += `/link <tournament-id>\n\n`;
+    message += `Um am Turnier teilzunehmen:\n`;
+    message += `/register <name> - Als neuer Spieler anmelden\n`;
+    message += `/link - Mit bestehendem Spieler verknüpfen\n\n`;
   } else {
     message += `⚠️ Du hast keinen Telegram-Username. Bitte setze einen in deinen Telegram-Einstellungen.\n\n`;
   }

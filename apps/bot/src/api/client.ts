@@ -105,3 +105,26 @@ export async function linkPlayerToTelegram(
   return data;
 }
 
+export async function getActiveTournament(): Promise<TournamentState> {
+  const data = await fetchJson<TournamentState>(
+    `${config.apiBaseUrl}/tournaments/active`
+  );
+  TournamentStateSchema.parse(data);
+  return data;
+}
+
+export async function registerPlayer(
+  tournamentId: string,
+  name: string
+): Promise<Player> {
+  const data = await fetchJson<Player>(
+    `${config.apiBaseUrl}/tournaments/${tournamentId}/register-player`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }
+  );
+  PlayerSchema.parse(data);
+  return data;
+}
+

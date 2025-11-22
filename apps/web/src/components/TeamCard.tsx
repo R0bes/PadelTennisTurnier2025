@@ -28,23 +28,31 @@ export default function TeamCard({
     <motion.div
       layout
       layoutId={`team-${team.id}`}
-      transition={{ type: 'spring', stiffness: 30, damping: 25, mass: 2.5 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 20, mass: 1 }}
       className={`relative ${isCompact ? 'h-full' : ''}`}
     >
       <div
-        className={`bg-gradient-to-br from-green-50 to-white rounded-lg border-2 ${
+        className={`${
+          players.length > 0
+            ? 'bg-gradient-to-br from-green-50 to-white'
+            : 'bg-gray-100'
+        } rounded-lg border-2 ${
           isWinner
             ? 'border-green-400'
             : isLoser
             ? 'border-red-400'
-            : 'border-gray-200 hover:border-green-400'
+            : players.length > 0
+            ? 'border-gray-200 hover:border-green-400'
+            : 'border-gray-300'
         } hover:shadow-md transition-all ${
           isCompact ? 'p-2.5 h-full flex flex-col' : 'p-3'
         }`}
       >
-        <h3 className={`font-semibold text-gray-800 text-center break-words ${isCompact ? 'text-base mb-2' : 'text-lg mb-3'}`}>
-          {team.name}
-        </h3>
+        {players.length > 0 && (
+          <h3 className={`font-semibold text-gray-800 text-center break-words ${isCompact ? 'text-base mb-2' : 'text-lg mb-3'}`}>
+            {team.name}
+          </h3>
+        )}
         {players.length > 0 ? (
           <div className={`${isHorizontalPlayers ? 'flex gap-2 justify-center' : 'space-y-2'} ${isCompact ? 'flex-1' : ''}`}>
             {players.slice(0, 2).map((player) => {
@@ -78,13 +86,8 @@ export default function TeamCard({
             })}
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-xs">T</span>
-            </div>
-            <span className={`text-gray-800 font-semibold truncate ${isCompact ? 'text-xs' : 'text-sm'}`}>
-              {team.name}
-            </span>
+          <div className={`${isCompact ? 'h-full' : 'min-h-[80px]'} flex items-center justify-center`}>
+            {/* Empty state - no content */}
           </div>
         )}
       </div>

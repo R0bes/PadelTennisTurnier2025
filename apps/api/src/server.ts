@@ -161,6 +161,63 @@ fastify.get<{ Params: { id: string } }>(
   }
 );
 
+// Get active tournament (newest one)
+fastify.get('/tournaments/active', async (request, reply) => {
+  try {
+    const tournament = await prisma.tournament.findFirst({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        players: {
+          include: {
+            team: true,
+          },
+        },
+        teams: {
+          include: {
+            players: true,
+          },
+        },
+      },
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'No tournament found' });
+    }
+
+    const result = {
+      id: tournament.id,
+      name: tournament.name,
+      phase: (tournament.phase || 'registration') as Phase,
+      createdAt: tournament.createdAt.toISOString(),
+      players: tournament.players.map((player) => ({
+        id: player.id,
+        name: player.name,
+        teamId: player.teamId || null,
+        telegramUsername: player.telegramUsername || null,
+      })),
+      teams: tournament.teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        tournamentId: team.tournamentId,
+        playerIds: team.players.map((p) => p.id),
+        createdAt: team.createdAt.toISOString(),
+      })),
+      rounds: [],
+    };
+
+    TournamentStateSchema.parse(result);
+    return result;
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 // Get tournament state
 fastify.get<{ Params: { id: string } }>(
   '/tournaments/:id/state',

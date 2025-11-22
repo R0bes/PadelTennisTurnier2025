@@ -1,18 +1,23 @@
 import { Context } from 'grammy';
-import { getTournamentState, setPhase } from '../api/client.js';
+import { getTournamentState, setPhase, getActiveTournament } from '../api/client.js';
 import { formatTournamentStatus, formatTeamList, formatPhaseList } from '../utils/formatters.js';
 import type { Phase } from '@tournament-app/shared-types';
 
+async function getTournamentIdOrActive(args: string[]): Promise<string> {
+  const tournamentId = args[1];
+  if (tournamentId) {
+    return tournamentId;
+  }
+  // Get active tournament if no ID provided
+  const activeTournament = await getActiveTournament();
+  return activeTournament.id;
+}
+
 export async function handleTournament(ctx: Context) {
   const args = ctx.message?.text?.split(' ') || [];
-  const tournamentId = args[1];
-
-  if (!tournamentId) {
-    await ctx.reply('❌ Bitte gib eine Tournament-ID an:\n/tournament <tournament-id>');
-    return;
-  }
 
   try {
+    const tournamentId = await getTournamentIdOrActive(args);
     const state = await getTournamentState(tournamentId);
     const message = formatTournamentStatus(state);
     await ctx.reply(message, { parse_mode: 'Markdown' });
@@ -24,15 +29,15 @@ export async function handleTournament(ctx: Context) {
 
 export async function handlePhase(ctx: Context) {
   const args = ctx.message?.text?.split(' ') || [];
-  const tournamentId = args[1];
-  const phase = args[2] as Phase;
+  const phase = args[1] as Phase;
 
-  if (!tournamentId || !phase) {
-    await ctx.reply('❌ Bitte gib Tournament-ID und Phase an:\n/phase <tournament-id> <phase>\n\n' + formatPhaseList());
+  if (!phase) {
+    await ctx.reply('❌ Bitte gib eine Phase an:\n/phase <phase>\n\n' + formatPhaseList());
     return;
   }
 
   try {
+    const tournamentId = await getTournamentIdOrActive(args);
     const state = await setPhase(tournamentId, phase);
     const message = `✅ Phase erfolgreich geändert!\n\n${formatTournamentStatus(state)}`;
     await ctx.reply(message, { parse_mode: 'Markdown' });
@@ -44,14 +49,9 @@ export async function handlePhase(ctx: Context) {
 
 export async function handleTeams(ctx: Context) {
   const args = ctx.message?.text?.split(' ') || [];
-  const tournamentId = args[1];
-
-  if (!tournamentId) {
-    await ctx.reply('❌ Bitte gib eine Tournament-ID an:\n/teams <tournament-id>');
-    return;
-  }
 
   try {
+    const tournamentId = await getTournamentIdOrActive(args);
     const state = await getTournamentState(tournamentId);
     if (!state.teams || state.teams.length === 0) {
       await ctx.reply('Keine Teams vorhanden.');

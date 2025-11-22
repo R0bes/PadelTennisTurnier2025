@@ -1,4 +1,4 @@
-// Shared styles and size calculations for PlayerCard and PlayerGhostCard
+image.png// Shared styles and size calculations for PlayerCard and PlayerGhostCard
 // This ensures they always have the same format
 
 export interface PlayerCardSizeConfig {

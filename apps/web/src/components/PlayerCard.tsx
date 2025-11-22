@@ -52,7 +52,7 @@ export default function PlayerCard({
       <motion.div
         layout
         layoutId={`player-${player.id}`}
-        transition={{ type: 'spring', stiffness: 30, damping: 25, mass: 2.5 }}
+        transition={{ type: 'spring', stiffness: 100, damping: 25, mass: 1.5 }}
         className={`relative ${isCompact ? 'group' : ''}`}
       >
       <div
