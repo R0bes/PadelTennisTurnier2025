@@ -26,16 +26,15 @@ export default function TeamCard({
   const isCompact = size === 'compact' || size === 'match';
   const isHorizontalPlayers = playerLayout === 'horizontal';
   
-  // Use round-specific layoutId for Swiss round transitions
-  const layoutId = roundNumber !== undefined 
-    ? `team-${team.id}-round-${roundNumber}`
-    : `team-${team.id}`;
+  // Use consistent layoutId for smooth transitions between rounds
+  // Teams should transition directly from one round to the next
+  const layoutId = `team-${team.id}`;
 
   return (
     <motion.div
       layout
       layoutId={layoutId}
-      transition={{ type: 'spring', stiffness: 20, damping: 15, mass: 2 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30, mass: 0.8 }}
       className={`relative z-10 ${isCompact ? 'h-full' : ''}`}
     >
       <div
@@ -56,7 +55,15 @@ export default function TeamCard({
             ? 'border-retro-brown-600 hover:border-retro-brown-700'
             : 'border-retro-brown-500'
         } hover:shadow-retro transition-all ${
-          isCompact ? 'p-2 h-full flex flex-col' : 'p-2.5 flex flex-col'
+          isCompact ? 'p-2 flex flex-col' : 'p-2.5 flex flex-col'
+        } ${
+          players.length > 0 && !isCompact
+            ? isHorizontalPlayers 
+              ? 'min-h-[180px]' 
+              : 'min-h-[240px]'
+            : isCompact
+            ? 'min-h-[120px]'
+            : 'min-h-[80px]'
         }`}
         style={{
           boxShadow: isWinner

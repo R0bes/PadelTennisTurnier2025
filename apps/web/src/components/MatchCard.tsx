@@ -45,10 +45,10 @@ export default function MatchCard({
       transition={{ type: 'spring', stiffness: 20, damping: 15, mass: 2 }}
       className={`rounded-md p-2 pt-4 border-2 transition-all shadow-sm relative w-full min-w-[280px] h-full ${
         isGhost
-          ? `opacity-60 border-dashed ${
+          ? `opacity-75 border-dashed ${
               isDone
-                ? 'bg-retro-beige-50/60 border-retro-brown-400/60'
-                : 'bg-retro-brown-50/60 border-retro-brown-400/60'
+                ? 'bg-retro-beige-50/75 border-retro-brown-400/75'
+                : 'bg-retro-brown-50/75 border-retro-brown-400/75'
             }`
           : isIdle
           ? 'bg-retro-brown-100 border-retro-brown-400 opacity-60'
@@ -61,7 +61,9 @@ export default function MatchCard({
     >
       <div
         className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded-full flex items-center justify-center text-sm font-bold shadow-lg whitespace-nowrap z-10 ${
-          isReady
+          isGhost
+            ? 'bg-retro-brown-500/75 text-retro-brown-200/90 border-dashed border-retro-brown-400/75'
+            : isReady
             ? 'bg-retro-yellow-500 text-retro-brown-900 ring-2 ring-retro-yellow-400 animate-pulse'
             : isDone
             ? 'bg-retro-brown-600 text-white'
@@ -275,28 +277,28 @@ export default function MatchCard({
           )}
 
           {/* Results section - always show, with placeholder if no results */}
-          <div className="pt-2 border-t border-retro-brown-300 mt-2">
+          <div className={`pt-2 border-t ${isGhost ? 'border-retro-brown-300/75' : 'border-retro-brown-300'} mt-2`}>
             <div className="text-center space-y-1">
               {score ? (
                 <>
                   <div className="flex items-center justify-center gap-2 flex-wrap">
                     {score.split(',').map((set, idx) => (
-                      <span key={idx} className="text-sm font-bold text-retro-brown-800">
+                      <span key={idx} className={`text-sm font-bold ${isGhost ? 'text-retro-brown-800/90' : 'text-retro-brown-800'}`}>
                         {set.trim()}
                       </span>
                     ))}
                   </div>
                   {duration && (
                     <div>
-                      <span className="text-xs text-retro-brown-600 font-semibold">Dauer: {duration}</span>
+                      <span className={`text-xs font-semibold ${isGhost ? 'text-retro-brown-600/90' : 'text-retro-brown-600'}`}>Dauer: {duration}</span>
                     </div>
                   )}
                 </>
               ) : (
                 <div className="space-y-1">
-                  <div className="text-xs text-retro-brown-400 italic">—</div>
+                  <div className={`text-xs italic ${isGhost ? 'text-retro-brown-400/75' : 'text-retro-brown-400'}`}>—</div>
                   {!isIdle && (
-                    <div className="text-xs text-retro-brown-400 italic">—</div>
+                    <div className={`text-xs italic ${isGhost ? 'text-retro-brown-400/75' : 'text-retro-brown-400'}`}>—</div>
                   )}
                 </div>
               )}

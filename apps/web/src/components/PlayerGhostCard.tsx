@@ -43,10 +43,10 @@ export default function PlayerGhostCard({
   return (
     <div className="relative">
       <div
-        className={`bg-retro-beige-200/40 rounded-lg border-2 border-dashed border-retro-brown-400/50 transition-all ${styles.padding} h-full ${
+        className={`bg-retro-beige-200/40 rounded-lg border-2 border-dashed border-retro-brown-400/50 transition-all ${styles.padding} ${
           isHorizontal 
-            ? `flex flex-row items-center ${styles.gap}` 
-            : 'flex flex-col items-center justify-center text-center'
+            ? `flex flex-row items-center ${styles.gap} h-[56px]` 
+            : 'flex flex-col items-center justify-center text-center h-[90px]'
         }`}
       >
         <div

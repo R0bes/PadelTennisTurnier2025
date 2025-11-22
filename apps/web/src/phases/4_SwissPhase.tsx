@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { LayoutGroup, AnimatePresence, motion } from 'framer-motion';
+import { LayoutGroup, motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { Zap, Play, Square, ArrowRight, FastForward } from 'lucide-react';
 import type { TournamentState, Team } from '@tournament-app/shared-types';
@@ -188,13 +188,10 @@ export default function SwissPhase({
     allRounds[1] = firstRoundMatches;
     
     // Swiss-Pairing for rounds 2 and 3
-    // Only fill rounds if they are activated AND previous round is complete
+    // Calculate rounds when previous round is complete, but only show/activate on button click
     for (let round = 2; round <= 3; round++) {
       const previousRound = round - 1;
       const previousRoundMatches = allRounds[previousRound];
-      
-      // Check if this round is activated
-      const isRoundActivated = activatedRounds.has(round);
       
       // Check if previous round is complete
       const previousRoundComplete = previousRoundMatches?.every((match, idx) => {
@@ -204,8 +201,8 @@ export default function SwissPhase({
         return !!(result && result.score && result.winner);
       });
       
-      // If round is not activated OR previous round is not complete, create empty matches
-      if (!isRoundActivated || !previousRoundComplete) {
+      // If previous round is not complete, create empty matches
+      if (!previousRoundComplete) {
         const emptyMatches: Array<{ team1: Team | null; team2: Team | null; score?: string; filled?: boolean; winner?: Team | null }> = [];
         for (let i = 0; i < numMatches; i++) {
           emptyMatches.push({
@@ -217,6 +214,9 @@ export default function SwissPhase({
         allRounds[round] = emptyMatches;
         continue;
       }
+      
+      // Previous round is complete - calculate the next round
+      // But only show it if the round is activated (for transition control)
       
       // Calculate team statistics from previous round
       const teamStats = new Map<string, { wins: number; losses: number; points: number }>();
@@ -745,7 +745,7 @@ export default function SwissPhase({
     };
     
     return (
-    <LayoutGroup>
+    <LayoutGroup key="swiss-rounds">
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
           <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
@@ -774,60 +774,6 @@ export default function SwissPhase({
               </span>
             </div>
           )}
-
-          {/* Buttons */}
-          <div className="flex items-center gap-2">
-            {nextMatchKey && !isTimerRunning && (
-              <button
-                onClick={onStartTimer}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold flex items-center gap-2"
-              >
-                <Play className="w-4 h-4" />
-                Match starten
-              </button>
-            )}
-            
-            {isTimerRunning && (
-              <button
-                onClick={onStopTimer}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 font-semibold flex items-center gap-2"
-              >
-                <Square className="w-4 h-4" />
-                Match stoppen
-              </button>
-            )}
-
-            {swissMatches && Object.keys(swissMatches).length > 0 && (
-              <button
-                onClick={onNextRound}
-                disabled={!allMatchesInCurrentRoundCompleted}
-                className={`px-5 py-3 rounded-lg font-bold text-base flex items-center gap-2 shadow-lg transition-all ${
-                  allMatchesInCurrentRoundCompleted
-                    ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer hover:shadow-xl'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
-                }`}
-                title={
-                  allMatchesInCurrentRoundCompleted
-                    ? 'Zur nächsten Runde wechseln'
-                    : 'Alle Matches dieser Runde müssen abgeschlossen sein'
-                }
-              >
-                <ArrowRight className="w-5 h-5" />
-                Nächste Runde
-              </button>
-            )}
-
-            {nextMatchKey && !isTimerRunning && (
-              <button
-                onClick={onSimulateNextMatch}
-                className="px-5 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-bold text-base flex items-center gap-2 shadow-lg hover:shadow-xl transition-all"
-                title="Nächstes Match schnell simulieren"
-              >
-                <FastForward className="w-5 h-5" />
-                Nächstes Match simulieren
-              </button>
-            )}
-          </div>
         </div>
 
         {teams.length < 2 && (
@@ -845,42 +791,56 @@ export default function SwissPhase({
               <Zap className="w-4 h-4" />
               Swiss Rounds
             </h3>
-            <AnimatePresence mode="wait">
-              <div key={roundTransitionKey} className="space-y-4">
-                {Object.entries(swissMatches)
-                  .sort(([a], [b]) => Number(a) - Number(b))
-                  .map(([roundNum, matches]) => {
-                    const typedMatches = matches as any[];
-                    const isActiveRound = currentRound === roundNum;
-                    const isRoundActivated = activatedRounds.has(Number(roundNum));
-                    return (
-                      <motion.div
-                        key={roundNum}
-                        initial={isRoundActivated ? { opacity: 0, y: 20 } : false}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className={`rounded-xl p-5 shadow-lg transition-all ${
-                          isActiveRound
-                            ? 'bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 border-4 border-blue-500 ring-4 ring-blue-200'
-                            : 'bg-gradient-to-br from-gray-50 to-white border-2 border-gray-400'
-                        }`}
-                      >
+            <div className="space-y-4">
+              {Object.entries(swissMatches)
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .map(([roundNum, matches]) => {
+                  const typedMatches = matches as any[];
+                  const isActiveRound = currentRound === roundNum;
+                  const isRoundActivated = activatedRounds.has(Number(roundNum));
+                  
+                  // Check if round has calculated matches (not just empty placeholders)
+                  const hasCalculatedMatches = typedMatches.some((match) => match.team1 && match.team2);
+                  
+                  // Show round if it's activated OR if it has calculated matches (for preview)
+                  const shouldShowRound = isRoundActivated || hasCalculatedMatches;
+                  
+                  if (!shouldShowRound) return null;
+                  
+                  return (
+                    <motion.div
+                      key={roundNum}
+                      layout
+                      initial={isRoundActivated && roundTransitionKey > 0 ? { opacity: 0 } : false}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2, layout: { duration: 0.3 } }}
+                      className={`rounded-xl p-5 shadow-lg transition-all ${
+                        isActiveRound
+                          ? 'bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 border-4 border-blue-500 ring-4 ring-blue-200'
+                          : isRoundActivated
+                          ? 'bg-gradient-to-br from-gray-50 to-white border-2 border-gray-400'
+                          : 'bg-gradient-to-br from-gray-50 to-white border-2 border-gray-300 opacity-60'
+                      }`}
+                    >
                       <h4 className={`text-2xl font-bold mb-4 text-center ${
                         isActiveRound
                           ? 'text-blue-700'
-                          : 'text-gray-800'
+                          : isRoundActivated
+                          ? 'text-gray-800'
+                          : 'text-gray-500'
                       }`}>
                         {isActiveRound && <span className="mr-2">▶</span>}
                         Round {roundNum}
                         {isActiveRound && <span className="ml-2 text-sm font-normal">(Aktive Runde)</span>}
+                        {!isRoundActivated && hasCalculatedMatches && <span className="ml-2 text-sm font-normal text-gray-400">(Bereit)</span>}
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start justify-items-center" style={{ gridAutoRows: 'minmax(auto, 1fr)' }}>
                         {typedMatches.map((match: any, idx: number) => {
                         const matchKey = `swiss-${roundNum}-${idx + 1}`;
                         const result = matchResults[matchKey];
                         const isDone = !!(result && result.score && result.winner);
-                        const isReady = nextMatchKey === matchKey && !isDone;
+                        // Only show as ready if round is activated
+                        const isReady = isRoundActivated && nextMatchKey === matchKey && !isDone;
                         const roundNumInt = Number(roundNum);
 
                         const matchState: 'idle' | 'ready' | 'done' = isDone
@@ -916,11 +876,66 @@ export default function SwissPhase({
                         );
                         })}
                       </div>
+                      
+                      {/* Buttons am unteren Rand der aktiven Runde */}
+                      {isActiveRound && (
+                        <div className="mt-6 pt-4 border-t border-gray-300 flex items-center justify-center gap-2 flex-wrap">
+                          {nextMatchKey && !isTimerRunning && (
+                            <button
+                              onClick={onStartTimer}
+                              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold flex items-center gap-2"
+                            >
+                              <Play className="w-4 h-4" />
+                              Match starten
+                            </button>
+                          )}
+                          
+                          {isTimerRunning && (
+                            <button
+                              onClick={onStopTimer}
+                              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 font-semibold flex items-center gap-2"
+                            >
+                              <Square className="w-4 h-4" />
+                              Match stoppen
+                            </button>
+                          )}
+
+                          {swissMatches && Object.keys(swissMatches).length > 0 && (
+                            <button
+                              onClick={onNextRound}
+                              disabled={!allMatchesInCurrentRoundCompleted}
+                              className={`px-5 py-3 rounded-lg font-bold text-base flex items-center gap-2 shadow-lg transition-all ${
+                                allMatchesInCurrentRoundCompleted
+                                  ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer hover:shadow-xl'
+                                  : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+                              }`}
+                              title={
+                                allMatchesInCurrentRoundCompleted
+                                  ? 'Zur nächsten Runde wechseln'
+                                  : 'Alle Matches dieser Runde müssen abgeschlossen sein'
+                              }
+                            >
+                              <ArrowRight className="w-5 h-5" />
+                              Nächste Runde
+                            </button>
+                          )}
+
+                          {nextMatchKey && !isTimerRunning && (
+                            <button
+                              onClick={onSimulateNextMatch}
+                              className="px-5 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-bold text-base flex items-center gap-2 shadow-lg hover:shadow-xl transition-all"
+                              title="Nächstes Match schnell simulieren"
+                            >
+                              <FastForward className="w-5 h-5" />
+                              Nächstes Match simulieren
+                            </button>
+                          )}
+                        </div>
+                      )}
                       </motion.div>
                     );
                   })}
-              </div>
-            </AnimatePresence>
+            </div>
           </div>
         )}
       </div>

@@ -57,10 +57,10 @@ export default function PlayerCard({
         style={{ willChange: 'transform' }}
       >
       <div
-        className={`bg-gradient-to-br from-retro-beige-300 via-retro-beige-200 to-retro-beige-100 rounded-lg border-2 border-retro-brown-600 hover:border-retro-orange-600 hover:shadow-retro transition-all ${styles.padding} h-full ${
+        className={`bg-gradient-to-br from-retro-beige-300 via-retro-beige-200 to-retro-beige-100 rounded-lg border-2 border-retro-brown-600 hover:border-retro-orange-600 hover:shadow-retro transition-all ${styles.padding} ${
           isHorizontal 
-            ? `flex flex-row items-center ${styles.gap} min-h-[56px]` 
-            : 'flex flex-col items-center justify-center text-center min-h-[90px]'
+            ? `flex flex-row items-center ${styles.gap} h-[56px]` 
+            : 'flex flex-col items-center justify-center text-center h-[90px]'
         }`}
         style={{
           boxShadow: '0 4px 12px rgba(95, 70, 56, 0.3), inset 0 1px 0 rgba(255,255,255,0.7)',

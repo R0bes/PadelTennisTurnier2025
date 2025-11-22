@@ -39,6 +39,14 @@ export default function TeamGhostCard({
             : 'border-dashed border-retro-brown-400/50'
         } transition-all ${
           isCompact ? 'p-3' : 'p-4'
+        } ${
+          players.length > 0 && !isCompact
+            ? isHorizontalPlayers 
+              ? 'min-h-[180px]' 
+              : 'min-h-[240px]'
+            : isCompact
+            ? 'min-h-[120px]'
+            : 'min-h-[80px]'
         }`}
       >
         <h3 className={`font-retro font-semibold text-retro-brown-600/60 text-center uppercase tracking-wide ${isCompact ? 'text-base mb-2' : 'text-lg mb-3'}`}>
