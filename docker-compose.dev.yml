@@ -1,0 +1,66 @@
+# Development docker-compose for hot-reload
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: deps
+    image: padel-tournament-api:dev
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/packages
+      - /app/apps/api/node_modules
+    working_dir: /app/apps/api
+    command: pnpm dev
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: deps
+    image: padel-tournament-web:dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:4000}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/packages
+      - /app/apps/web/node_modules
+    working_dir: /app/apps/web
+    command: pnpm dev
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+      target: deps
+    image: padel-tournament-bot:dev
+    environment:
+      - NODE_ENV=development
+      - BOT_TOKEN=${BOT_TOKEN:-}
+      - API_BASE_URL=http://api:4000
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/packages
+      - /app/apps/bot/node_modules
+    working_dir: /app/apps/bot
+    command: pnpm dev
+    depends_on:
+      - api
+    restart: unless-stopped
+
