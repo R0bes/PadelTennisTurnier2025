@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
 import type { Player } from '@tournament-app/shared-types';
+import { getPlayerCardStyles } from './playerCardStyles';
+import { getDummyAvatarUrl } from '@tournament-app/shared-utils';
 
 interface PlayerCardProps {
   player: Player;
@@ -8,11 +10,26 @@ interface PlayerCardProps {
   onDelete?: (playerId: string, playerName: string) => void;
   isDeleting?: boolean;
   size?: 'default' | 'compact';
+  layout?: 'vertical' | 'horizontal';
+  showInitials?: boolean;
 }
 
 // Generate DiceBear avatar URL based on player ID (deterministic)
 const getAvatarUrl = (playerId: string): string => {
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(playerId)}`;
+};
+
+// Helper function to get initials from a name in format "X. X."
+const getInitials = (name: string): string => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0][0].toUpperCase()}. ${parts[parts.length - 1][0].toUpperCase()}.`;
+  }
+  // Single name: take first two letters
+  if (name.length >= 2) {
+    return `${name[0].toUpperCase()}. ${name[1].toUpperCase()}.`;
+  }
+  return name[0].toUpperCase() + '.';
 };
 
 export default function PlayerCard({
@@ -21,9 +38,15 @@ export default function PlayerCard({
   onDelete,
   isDeleting = false,
   size = 'default',
+  layout = 'vertical',
+  showInitials = false,
 }: PlayerCardProps) {
   const isCompact = size === 'compact';
-  const avatarUrl = getAvatarUrl(player.id);
+  const isHorizontal = layout === 'horizontal';
+  const isDummy = player.name === 'Dummy Player';
+  const avatarUrl = isDummy ? getDummyAvatarUrl(player.id) : getAvatarUrl(player.id);
+  const styles = getPlayerCardStyles(isCompact, isHorizontal);
+  const displayName = showInitials ? getInitials(player.name) : player.name;
 
   return (
       <motion.div
@@ -33,14 +56,14 @@ export default function PlayerCard({
         className={`relative ${isCompact ? 'group' : ''}`}
       >
       <div
-        className={`bg-gradient-to-br from-blue-50 to-white rounded-lg border-2 border-gray-200 hover:border-blue-400 hover:shadow-md transition-all ${
-          isCompact ? 'p-2' : 'p-3'
-        } h-full flex flex-col items-center justify-center text-center`}
+        className={`bg-gradient-to-br from-blue-50 to-white rounded-lg border-2 border-gray-200 hover:border-blue-400 hover:shadow-md transition-all ${styles.padding} h-full ${
+          isHorizontal 
+            ? `flex flex-row items-center ${styles.gap}` 
+            : 'flex flex-col items-center justify-center text-center'
+        }`}
       >
         <div
-          className={`rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm ${
-            isCompact ? 'w-8 h-8 mb-1' : 'w-12 h-12 mb-2'
-          }`}
+          className={`rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm flex-shrink-0 ${styles.avatarSize} ${styles.avatarMargin || ''}`}
         >
           <img
             src={avatarUrl}
@@ -50,11 +73,11 @@ export default function PlayerCard({
           />
         </div>
         <span
-          className={`text-gray-800 font-semibold truncate w-full ${
-            isCompact ? 'text-xs' : 'text-sm'
-          }`}
+          className={`text-gray-800 font-semibold truncate ${
+            isHorizontal ? 'flex-1 text-left' : 'w-full'
+          } ${styles.textSize}`}
         >
-          {player.name}
+          {displayName}
         </span>
         {isAdmin && onDelete && !isCompact && (
           <button

@@ -3,7 +3,7 @@ import { AnimatePresence, motion, LayoutGroup } from 'framer-motion';
 import { Trophy, RotateCcw, Home, Users, Users2, Zap, Medal, Award, Play } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Phase, TournamentState, Team } from '@tournament-app/shared-types';
-import { generateKOBracket } from '@tournament-app/shared-utils';
+import { generateKOBracket, generateTeamName } from '@tournament-app/shared-utils';
 import {
   createTournament,
   getTournamentState,
@@ -231,12 +231,65 @@ function App() {
     toast.success(`Match ${nextMatch.key} completed: ${winner?.name} wins ${score}`);
   };
 
-  // Auto-generate teams
+  // Generate teams (create empty teams without players)
+  const generateTeams = async (tournamentId: string, numTeams: number): Promise<Team[]> => {
+    const teamPromises = [];
+    for (let i = 0; i < numTeams; i++) {
+      const teamName = generateTeamName(i);
+      teamPromises.push(createTeam(tournamentId, teamName));
+    }
+    return await Promise.all(teamPromises);
+  };
+
+  // Assign players to teams (distribute players across teams)
+  const assignPlayersToTeams = async (
+    tournamentId: string,
+    teams: Team[],
+    players: Array<{ id: string; name: string }>
+  ): Promise<void> => {
+    const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+    const numTeams = teams.length;
+    const totalSlots = numTeams * 2;
+    const dummyPlayersNeeded = Math.max(0, totalSlots - shuffledPlayers.length);
+
+    // Create all dummy players first (in parallel)
+    const dummyPlayerPromises = [];
+    for (let i = 0; i < dummyPlayersNeeded; i++) {
+      dummyPlayerPromises.push(registerPlayer(tournamentId, 'Dummy Player'));
+    }
+    const dummyPlayers = await Promise.all(dummyPlayerPromises);
+
+    // Assign real players and dummy players to teams
+    const assignPromises = [];
+    let playerIndex = 0;
+    let dummyPlayerIndex = 0;
+
+    for (let i = 0; i < teams.length; i++) {
+      const team = teams[i];
+      for (let j = 0; j < 2; j++) {
+        if (playerIndex < shuffledPlayers.length) {
+          assignPromises.push(
+            assignPlayerToTeam(tournamentId, team.id, shuffledPlayers[playerIndex].id)
+          );
+          playerIndex++;
+        } else if (dummyPlayerIndex < dummyPlayers.length) {
+          assignPromises.push(
+            assignPlayerToTeam(tournamentId, team.id, dummyPlayers[dummyPlayerIndex].id)
+          );
+          dummyPlayerIndex++;
+        }
+      }
+    }
+
+    await Promise.all(assignPromises);
+  };
+
+  // Auto-generate teams (orchestrates team generation and player assignment)
   const handleAutoGenerateTeams = async () => {
     if (!tournamentState) return;
 
     const unassignedPlayers = tournamentState.players.filter(
-      (player) => player.name !== 'DummyPlayer'
+      (player) => player.name !== 'Dummy Player'
     );
 
     if (unassignedPlayers.length === 0) {
@@ -249,59 +302,26 @@ function App() {
     try {
       setIsGenerating(true);
 
+      // Calculate number of teams needed
       let numTeams = Math.ceil(unassignedPlayers.length / 2);
       if (numTeams % 2 !== 0) {
         numTeams += 1;
       }
 
-      const shuffledPlayers = [...unassignedPlayers].sort(() => Math.random() - 0.5);
+      // Step 1: Generate teams (create empty teams)
+      const createdTeams = await generateTeams(tournamentState.id, numTeams);
 
-      const teamPromises = [];
-      for (let i = 0; i < numTeams; i++) {
-        teamPromises.push(
-          createTeam(tournamentState.id, `Team ${i + 1}`)
-        );
-      }
-      const createdTeams = await Promise.all(teamPromises);
-
-      const assignPromises = [];
-      let playerIndex = 0;
+      // Step 2: Assign players to teams
       const totalSlots = numTeams * 2;
-      const dummyPlayersNeeded = Math.max(0, totalSlots - shuffledPlayers.length);
-      
-      // Create all dummy players first (in parallel)
-      const dummyPlayerPromises = [];
-      for (let i = 0; i < dummyPlayersNeeded; i++) {
-        dummyPlayerPromises.push(registerPlayer(tournamentState.id, 'DummyPlayer'));
-      }
-      const dummyPlayers = await Promise.all(dummyPlayerPromises);
-      
-      // Assign real players and dummy players to teams
-      let dummyPlayerIndex = 0;
-      for (let i = 0; i < createdTeams.length; i++) {
-        const team = createdTeams[i];
-        for (let j = 0; j < 2; j++) {
-          if (playerIndex < shuffledPlayers.length) {
-            assignPromises.push(
-              assignPlayerToTeam(tournamentState.id, team.id, shuffledPlayers[playerIndex].id)
-            );
-            playerIndex++;
-          } else if (dummyPlayerIndex < dummyPlayers.length) {
-            assignPromises.push(
-              assignPlayerToTeam(tournamentState.id, team.id, dummyPlayers[dummyPlayerIndex].id)
-            );
-            dummyPlayerIndex++;
-          }
-        }
-      }
-      
-      await Promise.all(assignPromises);
+      const dummyPlayersNeeded = Math.max(0, totalSlots - unassignedPlayers.length);
+      await assignPlayersToTeams(tournamentState.id, createdTeams, unassignedPlayers);
 
+      // Step 3: Refresh tournament state to show teams
       await setPhase(tournamentState.id, 'team_setup');
       await refreshTournament();
 
       toast.success(
-        `Created ${numTeams} teams${dummyPlayersNeeded > 0 ? ` with ${dummyPlayersNeeded} DummyPlayer(s)` : ''}!`
+        `Created ${numTeams} teams${dummyPlayersNeeded > 0 ? ` with ${dummyPlayersNeeded} Dummy Player(s)` : ''}!`
       );
     } catch (error) {
       const message =
@@ -735,11 +755,11 @@ function App() {
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
                         <AnimatePresence mode="popLayout">
                           {tournamentState.players.map((player) =>
                             player.teamId ? (
-                              <PlayerGhostCard key={player.id} player={player} />
+                              <PlayerGhostCard key={player.id} player={player} layout="horizontal" />
                             ) : (
                               <PlayerCard
                                 key={player.id}
@@ -747,6 +767,7 @@ function App() {
                                 isAdmin={isAdmin}
                                 onDelete={handleDeletePlayer}
                                 isDeleting={isDeleting === player.id}
+                                layout="horizontal"
                               />
                             )
                           )}
@@ -772,7 +793,7 @@ function App() {
                       </div>
 
                       <div className="bg-white rounded-lg shadow p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                           <AnimatePresence mode="popLayout">
                             {tournamentState.teams.map((team) => {
                               const teamPlayers = tournamentState.players.filter((player) =>
@@ -786,6 +807,7 @@ function App() {
                                     key={team.id}
                                     team={team}
                                     players={teamPlayers}
+                                    playerLayout="horizontal"
                                   />
                                 );
                               } else {
@@ -794,6 +816,7 @@ function App() {
                                     key={team.id}
                                     team={team}
                                     players={teamPlayers}
+                                    playerLayout="horizontal"
                                   />
                                 );
                               }
@@ -807,8 +830,8 @@ function App() {
               </motion.div>
             )}
 
-            {/* Matches Section - show empty structure in team_setup for transition */}
-            {(phasesReached.includes('team_setup') || phasesReached.includes('match_setup') || phasesReached.includes('swiss_rounds')) && (
+            {/* Matches Section - only show from match_setup phase onwards */}
+            {(phasesReached.includes('match_setup') || phasesReached.includes('swiss_rounds') || phasesReached.includes('ko_bracket')) && (
               <motion.div
                 id="phase-swiss-rounds"
                 initial={{ opacity: 0, y: 20 }}
@@ -846,27 +869,29 @@ function App() {
                               .sort(([a], [b]) => Number(a) - Number(b))
                               .map(([roundNum, matches]) => (
                                 <div key={roundNum} className="bg-gradient-to-br from-green-50 to-white rounded-lg p-4 border border-green-200">
-                                  <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                                  <h4 className="text-xl font-bold text-gray-800 mb-4 text-center">
                                     Round {roundNum}
                                   </h4>
-                                  <div className="flex gap-2">
+                                  <div className="flex gap-4 justify-between flex-wrap">
                                     {matches.map((match, idx) => {
                                       const isFilled = !!(match.filled && match.team1 && match.team2);
                                       const isCompleted = !!(match.score !== undefined && match.score !== null);
                                       const winner = match.winner || null;
                                       
                                       return (
-                                        <MatchCard
-                                          key={idx}
-                                          matchNumber={`${roundNum}-${idx + 1}`}
-                                          team1={match.team1}
-                                          team2={match.team2}
-                                          players={tournamentState.players}
-                                          score={match.score}
-                                          winner={winner}
-                                          isFilled={isFilled}
-                                          isCompleted={isCompleted}
-                                        />
+                                        <div key={idx} className="flex-1 min-w-[280px] max-w-[350px]">
+                                          <MatchCard
+                                            matchNumber={`${roundNum}-${idx + 1}`}
+                                            team1={match.team1}
+                                            team2={match.team2}
+                                            players={tournamentState.players}
+                                            score={match.score}
+                                            winner={winner}
+                                            isFilled={isFilled}
+                                            isCompleted={isCompleted}
+                                            phase={tournamentState.phase === 'match_setup' ? 'match_setup' : tournamentState.phase === 'swiss_rounds' ? 'swiss_rounds' : 'ko_bracket'}
+                                          />
+                                        </div>
                                       );
                                     })}
                                   </div>
@@ -907,7 +932,7 @@ function App() {
                                       const matchNumber = `${roundShort}-${matchIdx + 1}`;
                                       
                                       return (
-                                        <div key={matchIdx} className="relative" style={{ width: '240px', flexShrink: 0 }}>
+                                        <div key={matchIdx} className="relative" style={{ width: '280px', flexShrink: 0 }}>
                                           <MatchCard
                                             matchNumber={matchNumber}
                                             team1={match.team1}
@@ -917,6 +942,7 @@ function App() {
                                             winner={match.winner || null}
                                             isFilled={isFilled}
                                             isCompleted={isCompleted}
+                                            phase={tournamentState.phase === 'match_setup' ? 'match_setup' : tournamentState.phase === 'swiss_rounds' ? 'swiss_rounds' : 'ko_bracket'}
                                           />
                                         </div>
                                       );

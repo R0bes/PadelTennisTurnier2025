@@ -12,6 +12,7 @@ interface MatchCardProps {
   isFilled?: boolean;
   isCompleted?: boolean;
   className?: string;
+  phase?: 'match_setup' | 'swiss_rounds' | 'ko_bracket';
 }
 
 export default function MatchCard({
@@ -24,18 +25,23 @@ export default function MatchCard({
   isFilled = false,
   isCompleted = false,
   className = '',
+  phase,
 }: MatchCardProps) {
+  const isMatchSetup = phase === 'match_setup';
+  const playerLayout = isMatchSetup ? 'vertical' : 'horizontal';
+  const showInitials = isMatchSetup;
+
   return (
     <motion.div
       layout
-      className={`rounded-md p-2 border-2 transition-all shadow-sm relative flex-1 ${
+      className={`rounded-md p-2 pt-4 border-2 transition-all shadow-sm relative w-full min-w-[280px] ${
         isFilled
           ? 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md'
           : 'bg-gray-50 border-dashed border-gray-300'
       } ${className}`}
     >
       <div
-        className={`absolute -top-1.5 -left-1.5 px-1.5 py-0.5 rounded-full flex items-center justify-center text-xs font-bold shadow-md whitespace-nowrap ${
+        className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded-full flex items-center justify-center text-sm font-bold shadow-lg whitespace-nowrap z-10 ${
           isCompleted
             ? 'bg-blue-500 text-white'
             : isFilled
@@ -45,67 +51,131 @@ export default function MatchCard({
       >
         {matchNumber}
       </div>
-      <div className="space-y-1.5">
-        {team1 ? (
-          <TeamCard
-            team={team1}
-            size="match"
-            players={players.filter((player) => team1.playerIds.includes(player.id))}
-            isWinner={isCompleted && winner === team1}
-            isLoser={isCompleted && winner !== team1 && winner !== null}
-          />
-        ) : (
-          <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300">
-            <div className="flex items-center gap-1.5">
-              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
-                <span className="text-white font-bold text-xs">1</span>
-              </div>
-              <span className="text-xs font-semibold truncate text-gray-400 italic">
-                —
-              </span>
+      {isMatchSetup ? (
+        // Phase 3: Teams nebeneinander, ohne "vs"
+        <div className="flex gap-2 items-stretch">
+          {team1 ? (
+            <div className="flex-1 min-w-0">
+              <TeamCard
+                team={team1}
+                size="match"
+                players={players.filter((player) => team1.playerIds.includes(player.id))}
+                isWinner={isCompleted && winner === team1}
+                isLoser={isCompleted && winner !== team1 && winner !== null}
+                playerLayout={playerLayout}
+                showInitials={showInitials}
+              />
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex-1 min-w-0 rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 flex items-center justify-center min-h-[80px]">
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                  <span className="text-white font-bold text-xs">1</span>
+                </div>
+                <span className="text-xs font-semibold truncate text-gray-400 italic">
+                  —
+                </span>
+              </div>
+            </div>
+          )}
 
-        <div className="text-center py-0.5">
-          <span
-            className={`text-xs font-bold ${
-              isFilled ? 'text-gray-400' : 'text-gray-300'
-            }`}
-          >
-            vs
-          </span>
+          {team2 ? (
+            <div className="flex-1 min-w-0">
+              <TeamCard
+                team={team2}
+                size="match"
+                players={players.filter((player) => team2.playerIds.includes(player.id))}
+                isWinner={isCompleted && winner === team2}
+                isLoser={isCompleted && winner !== team2 && winner !== null}
+                playerLayout={playerLayout}
+                showInitials={showInitials}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 min-w-0 rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 flex items-center justify-center min-h-[80px]">
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                  <span className="text-white font-bold text-xs">2</span>
+                </div>
+                <span className="text-xs font-semibold truncate text-gray-400 italic">
+                  —
+                </span>
+              </div>
+            </div>
+          )}
         </div>
-
-        {team2 ? (
-          <TeamCard
-            team={team2}
-            size="match"
-            players={players.filter((player) => team2.playerIds.includes(player.id))}
-            isWinner={isCompleted && winner === team2}
-            isLoser={isCompleted && winner !== team2 && winner !== null}
-          />
-        ) : (
-          <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300">
-            <div className="flex items-center gap-1.5">
-              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
-                <span className="text-white font-bold text-xs">2</span>
+      ) : (
+        // Phase 4+: Teams übereinander mit "vs"
+        <div className="space-y-1.5">
+          {team1 ? (
+            <div className="min-h-[80px]">
+              <TeamCard
+                team={team1}
+                size="match"
+                players={players.filter((player) => team1.playerIds.includes(player.id))}
+                isWinner={isCompleted && winner === team1}
+                isLoser={isCompleted && winner !== team1 && winner !== null}
+                playerLayout={playerLayout}
+                showInitials={showInitials}
+              />
+            </div>
+          ) : (
+            <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 min-h-[80px] flex items-center justify-center">
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                  <span className="text-white font-bold text-xs">1</span>
+                </div>
+                <span className="text-xs font-semibold truncate text-gray-400 italic">
+                  —
+                </span>
               </div>
-              <span className="text-xs font-semibold truncate text-gray-400 italic">
-                —
-              </span>
             </div>
-          </div>
-        )}
+          )}
 
-        {score && (
-          <div className="pt-1 border-t border-gray-200">
-            <div className="text-center">
-              <span className="text-sm font-bold text-blue-600">{score}</span>
-            </div>
+          <div className="text-center py-0.5">
+            <span
+              className={`text-xs font-bold ${
+                isFilled ? 'text-gray-400' : 'text-gray-300'
+              }`}
+            >
+              vs
+            </span>
           </div>
-        )}
-      </div>
+
+          {team2 ? (
+            <div className="min-h-[80px]">
+              <TeamCard
+                team={team2}
+                size="match"
+                players={players.filter((player) => team2.playerIds.includes(player.id))}
+                isWinner={isCompleted && winner === team2}
+                isLoser={isCompleted && winner !== team2 && winner !== null}
+                playerLayout={playerLayout}
+                showInitials={showInitials}
+              />
+            </div>
+          ) : (
+            <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 min-h-[80px] flex items-center justify-center">
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                  <span className="text-white font-bold text-xs">2</span>
+                </div>
+                <span className="text-xs font-semibold truncate text-gray-400 italic">
+                  —
+                </span>
+              </div>
+            </div>
+          )}
+
+          {score && (
+            <div className="pt-1 border-t border-gray-200">
+              <div className="text-center">
+                <span className="text-sm font-bold text-blue-600">{score}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
