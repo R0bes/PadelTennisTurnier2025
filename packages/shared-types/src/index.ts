@@ -3,6 +3,7 @@ import { z } from "zod";
 export const PhaseSchema = z.enum([
   "registration",
   "team_setup",
+  "match_setup",
   "swiss_rounds",
   "ko_bracket",
   "summary",
@@ -13,6 +14,7 @@ export type Phase = z.infer<typeof PhaseSchema>;
 export const PlayerSchema = z.object({
   id: z.string(),
   name: z.string(),
+  teamId: z.string().nullable().optional(),
 });
 
 export type Player = z.infer<typeof PlayerSchema>;

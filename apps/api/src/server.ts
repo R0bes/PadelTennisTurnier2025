@@ -23,7 +23,8 @@ await fastify.register(cors, {
 // Phase transition validation
 const allowedTransitions: Record<Phase, Phase[]> = {
   registration: ['team_setup'],
-  team_setup: ['swiss_rounds'],
+  team_setup: ['match_setup', 'swiss_rounds'],
+  match_setup: ['swiss_rounds'],
   swiss_rounds: ['ko_bracket'],
   ko_bracket: ['summary'],
   summary: [], // No transitions from summary
@@ -97,6 +98,7 @@ fastify.post<{ Body: { name: string } }>('/tournaments', async (request, reply) 
       players: tournamentWithTeams!.players.map((player) => ({
         id: player.id,
         name: player.name,
+        teamId: player.teamId || null,
       })),
       teams: tournamentWithTeams!.teams.map((team) => ({
         id: team.id,
@@ -143,10 +145,11 @@ fastify.get<{ Params: { id: string } }>(
       name: tournament.name,
       phase: tournament.phase as Phase,
       createdAt: tournament.createdAt.toISOString(),
-      players: tournament.players.map((player) => ({
-        id: player.id,
-        name: player.name,
-      })),
+        players: tournament.players.map((player) => ({
+          id: player.id,
+          name: player.name,
+          teamId: player.teamId || null,
+        })),
     };
 
     // Validate with shared schema
@@ -191,6 +194,7 @@ fastify.get<{ Params: { id: string } }>(
         players: tournament.players.map((player) => ({
           id: player.id,
           name: player.name,
+          teamId: player.teamId || null,
         })),
         teams: tournament.teams.map((team) => ({
           id: team.id,
@@ -277,6 +281,7 @@ fastify.post<{ Params: { id: string }; Body: { phase: Phase } }>(
       players: updated.players.map((player) => ({
         id: player.id,
         name: player.name,
+        teamId: player.teamId || null,
       })),
       teams: updated.teams.map((team) => ({
         id: team.id,

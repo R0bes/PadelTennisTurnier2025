@@ -1,34 +1,14 @@
 import { useMemo } from 'react';
-import { Trophy, GitBranch, Zap } from 'lucide-react';
-import type { Phase, TournamentState, Team } from '@tournament-app/shared-types';
+import { Trophy, Zap } from 'lucide-react';
+import { LayoutGroup } from 'framer-motion';
+import type { TournamentState, Team } from '@tournament-app/shared-types';
+import TeamCard from '../components/TeamCard';
 
 interface TournamentFlowPageProps {
   tournamentState: TournamentState;
   isAdmin: boolean;
 }
 
-const phases: Phase[] = [
-  'registration',
-  'team_setup',
-  'swiss_rounds',
-  'ko_bracket',
-  'summary',
-];
-
-// Generate round-robin pairings for teams
-function generateTeamPairings(teams: Team[]): Array<[Team, Team]> {
-  const pairs: Array<[Team, Team]> = [];
-  const shuffled = [...teams].sort(() => Math.random() - 0.5);
-  
-  // If odd number of teams, one team gets a bye
-  for (let i = 0; i < shuffled.length; i += 2) {
-    if (i + 1 < shuffled.length) {
-      pairs.push([shuffled[i], shuffled[i + 1]]);
-    }
-  }
-  
-  return pairs;
-}
 
 // Generate KO bracket structure (Quarterfinals → Semifinals → Final only)
 function generateKOBracket(teams: Team[]) {
@@ -43,7 +23,7 @@ function generateKOBracket(teams: Team[]) {
   }
   
   // Seed teams (top teams, fill with byes if needed)
-  const seededTeams = [...teams].slice(0, bracketSize);
+  const seededTeams: (Team | null)[] = [...teams].slice(0, bracketSize);
   while (seededTeams.length < bracketSize) {
     seededTeams.push(null); // Bye
   }
@@ -74,21 +54,48 @@ function generateKOBracket(teams: Team[]) {
 
 export default function TournamentFlowPage({
   tournamentState,
-  isAdmin,
+  isAdmin: _isAdmin,
 }: TournamentFlowPageProps) {
   const teams = tournamentState.teams || [];
-  const currentPhaseIndex = phases.indexOf(tournamentState.phase);
 
   // Generate Swiss rounds automatically (always 3 rounds)
-  // Matches start empty and will be filled round by round
+  // If phase is match_setup, fill first round with teams for animation
   const swissMatches = useMemo(() => {
     if (teams.length < 2) return {};
     
     const allRounds: Record<number, Array<{ team1: Team | null; team2: Team | null; score?: string; filled?: boolean }>> = {};
-    // Generate exactly 3 rounds for Swiss system
-    // Initially all matches are empty (null teams)
     const numMatches = Math.ceil(teams.length / 2);
-    for (let round = 1; round <= 3; round++) {
+    
+    // Shuffle teams for first round
+    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+    
+    // Round 1: Fill with teams if phase is match_setup, otherwise empty
+    const firstRoundMatches: Array<{ team1: Team | null; team2: Team | null; score?: string; filled?: boolean }> = [];
+    if (tournamentState.phase === 'match_setup') {
+      // Fill first round with teams for animation
+      for (let i = 0; i < numMatches; i++) {
+        const team1 = shuffledTeams[i * 2] || null;
+        const team2 = shuffledTeams[i * 2 + 1] || null;
+        firstRoundMatches.push({
+          team1,
+          team2,
+          filled: team1 !== null && team2 !== null,
+        });
+      }
+    } else {
+      // Empty matches
+      for (let i = 0; i < numMatches; i++) {
+        firstRoundMatches.push({
+          team1: null,
+          team2: null,
+          filled: false,
+        });
+      }
+    }
+    allRounds[1] = firstRoundMatches;
+    
+    // Rounds 2 and 3: Always empty initially
+    for (let round = 2; round <= 3; round++) {
       allRounds[round] = Array.from({ length: numMatches }, () => ({
         team1: null,
         team2: null,
@@ -96,59 +103,14 @@ export default function TournamentFlowPage({
       }));
     }
     return allRounds;
-  }, [teams]);
+  }, [teams, tournamentState.phase]);
 
   // KO Bracket
   const koBracket = useMemo(() => generateKOBracket(teams), [teams]);
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <Trophy className="w-8 h-8" />
-          Tournament Flow
-        </h1>
-        <p className="mt-2 text-gray-600">
-          View the tournament progression through different phases. Current
-          phase: <strong>{tournamentState.phase.replace('_', ' ')}</strong>
-        </p>
-      </div>
-
-      {/* Phase Timeline */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
-          <GitBranch className="w-5 h-5" />
-          Tournament Phases
-        </h2>
-        <div className="flex items-center justify-between">
-          {phases.map((phase, index) => (
-            <div key={phase} className="flex items-center flex-1">
-              <div className="flex flex-col items-center flex-1">
-                <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold ${
-                    index <= currentPhaseIndex
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-600'
-                  }`}
-                >
-                  {index + 1}
-                </div>
-                <span className="mt-2 text-xs text-gray-600 text-center capitalize">
-                  {phase.replace('_', ' ')}
-                </span>
-              </div>
-              {index < phases.length - 1 && (
-                <div
-                  className={`flex-1 h-1 mx-2 ${
-                    index < currentPhaseIndex ? 'bg-blue-500' : 'bg-gray-200'
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
+    <LayoutGroup>
+      <div className="space-y-8">
       {/* Tournament Matches - Swiss Rounds & KO Bracket */}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="mb-6">
@@ -185,46 +147,48 @@ export default function TournamentFlowPage({
                     <div className="flex gap-2">
                       {matches.map((match, idx) => {
                         const isFilled = match.filled && match.team1 && match.team2;
+                        const isCompleted = match.score !== undefined && match.score !== null;
+                        const winner = match.score ? (match.score.includes('-') ? (parseInt(match.score.split('-')[0]) > parseInt(match.score.split('-')[1]) ? match.team1 : match.team2) : null) : null;
+                        
                         return (
                           <div
                             key={idx}
                             className={`rounded-md p-2 border-2 transition-all shadow-sm relative flex-1 ${
                               isFilled
-                                ? 'bg-white border-gray-200 hover:border-green-400 hover:shadow-md'
+                                ? 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md'
                                 : 'bg-gray-50 border-dashed border-gray-300'
                             }`}
                           >
                             <div className={`absolute -top-1.5 -left-1.5 px-1.5 py-0.5 rounded-full flex items-center justify-center text-xs font-bold shadow-md whitespace-nowrap ${
-                              isFilled
-                                ? 'bg-green-500 text-white'
+                              isCompleted
+                                ? 'bg-blue-500 text-white'
+                                : isFilled
+                                ? 'bg-gray-500 text-white'
                                 : 'bg-gray-400 text-white'
                             }`}>
                               {roundNum}-{idx + 1}
                             </div>
                             <div className="space-y-1.5">
                               {/* Team 1 Card */}
-                              <div className={`rounded p-1.5 border transition-all ${
-                                isFilled
-                                  ? 'bg-gradient-to-r from-green-50 to-white border-green-200'
-                                  : 'bg-gray-100 border-dashed border-gray-300'
-                              }`}>
-                                <div className="flex items-center gap-1.5">
-                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                    isFilled
-                                      ? 'bg-green-500'
-                                      : 'bg-gray-300'
-                                  }`}>
-                                    <span className="text-white font-bold text-xs">1</span>
+                              {match.team1 ? (
+                                <TeamCard 
+                                  team={match.team1} 
+                                  size="match"
+                                  isWinner={isCompleted && winner === match.team1}
+                                  isLoser={isCompleted && winner !== match.team1 && winner !== null}
+                                />
+                              ) : (
+                                <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                                      <span className="text-white font-bold text-xs">1</span>
+                                    </div>
+                                    <span className="text-xs font-semibold truncate text-gray-400 italic">
+                                      —
+                                    </span>
                                   </div>
-                                  <span className={`text-xs font-semibold truncate ${
-                                    isFilled
-                                      ? 'text-gray-900'
-                                      : 'text-gray-400 italic'
-                                  }`}>
-                                    {match.team1?.name || '—'}
-                                  </span>
                                 </div>
-                              </div>
+                              )}
                               
                               {/* VS */}
                               <div className="text-center py-0.5">
@@ -236,34 +200,31 @@ export default function TournamentFlowPage({
                               </div>
                               
                               {/* Team 2 Card */}
-                              <div className={`rounded p-1.5 border transition-all ${
-                                isFilled
-                                  ? 'bg-gradient-to-r from-blue-50 to-white border-blue-200'
-                                  : 'bg-gray-100 border-dashed border-gray-300'
-                              }`}>
-                                <div className="flex items-center gap-1.5">
-                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                    isFilled
-                                      ? 'bg-blue-500'
-                                      : 'bg-gray-300'
-                                  }`}>
-                                    <span className="text-white font-bold text-xs">2</span>
+                              {match.team2 ? (
+                                <TeamCard 
+                                  team={match.team2} 
+                                  size="match"
+                                  isWinner={isCompleted && winner === match.team2}
+                                  isLoser={isCompleted && winner !== match.team2 && winner !== null}
+                                />
+                              ) : (
+                                <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                                      <span className="text-white font-bold text-xs">2</span>
+                                    </div>
+                                    <span className="text-xs font-semibold truncate text-gray-400 italic">
+                                      —
+                                    </span>
                                   </div>
-                                  <span className={`text-xs font-semibold truncate ${
-                                    isFilled
-                                      ? 'text-gray-900'
-                                      : 'text-gray-400 italic'
-                                  }`}>
-                                    {match.team2?.name || '—'}
-                                  </span>
                                 </div>
-                              </div>
+                              )}
                               
                               {/* Score */}
                               {match.score && (
                                 <div className="pt-1 border-t border-gray-200">
                                   <div className="text-center">
-                                    <span className="text-sm font-bold text-green-600">
+                                    <span className="text-sm font-bold text-blue-600">
                                       {match.score}
                                     </span>
                                   </div>
@@ -309,6 +270,7 @@ export default function TournamentFlowPage({
                     <div className="flex gap-2 relative justify-center">
                       {round.matches.map((match, matchIdx) => {
                         const isFilled = match.team1 && match.team2;
+                        const isCompleted = match.winner !== undefined && match.winner !== null;
                         const matchNumber = `${roundShort}-${matchIdx + 1}`;
                         
                         return (
@@ -317,51 +279,40 @@ export default function TournamentFlowPage({
                             <div
                               className={`rounded-md p-2 border-2 shadow-sm transition-all relative ${
                                 isFilled
-                                  ? 'bg-white border-blue-200 hover:border-blue-400 hover:shadow-md'
+                                  ? 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md'
                                   : 'bg-gray-50 border-dashed border-gray-300'
                               }`}
                             >
                               <div className={`absolute -top-1.5 -left-1.5 px-1.5 py-0.5 rounded-full flex items-center justify-center text-xs font-bold shadow-md whitespace-nowrap ${
-                                isFilled
+                                isCompleted
                                   ? 'bg-blue-500 text-white'
+                                  : isFilled
+                                  ? 'bg-gray-500 text-white'
                                   : 'bg-gray-400 text-white'
                               }`}>
                                 {matchNumber}
                               </div>
                               <div className="space-y-1.5">
                                 {/* Team 1 Card */}
-                                <div
-                                  className={`rounded p-1.5 border transition-all ${
-                                    match.winner === match.team1
-                                      ? 'bg-green-50 border-green-300'
-                                      : isFilled && match.team1
-                                      ? 'bg-gradient-to-r from-purple-50 to-white border-purple-200'
-                                      : 'bg-gray-100 border-dashed border-gray-300'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5">
-                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                      match.winner === match.team1
-                                        ? 'bg-green-500'
-                                        : isFilled && match.team1
-                                        ? 'bg-purple-500'
-                                        : 'bg-gray-300'
-                                    }`}>
-                                      <span className="font-bold text-xs text-white">
-                                        1
+                                {match.team1 ? (
+                                  <TeamCard 
+                                    team={match.team1} 
+                                    size="match"
+                                    isWinner={isCompleted && match.winner === match.team1}
+                                    isLoser={isCompleted && match.winner !== match.team1 && match.winner !== null}
+                                  />
+                                ) : (
+                                  <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                                        <span className="text-white font-bold text-xs">1</span>
+                                      </div>
+                                      <span className="text-xs font-semibold truncate text-gray-400 italic">
+                                        —
                                       </span>
                                     </div>
-                                    <span className={`text-xs font-semibold truncate ${
-                                      match.team1
-                                        ? match.winner === match.team1
-                                          ? 'text-gray-900'
-                                          : 'text-gray-900'
-                                        : 'text-gray-400 italic'
-                                    }`}>
-                                      {match.team1?.name || '—'}
-                                    </span>
                                   </div>
-                                </div>
+                                )}
                                 
                                 {/* VS */}
                                 <div className="text-center py-0.5">
@@ -373,38 +324,25 @@ export default function TournamentFlowPage({
                                 </div>
                                 
                                 {/* Team 2 Card */}
-                                <div
-                                  className={`rounded p-1.5 border transition-all ${
-                                    match.winner === match.team2
-                                      ? 'bg-green-50 border-green-300'
-                                      : isFilled && match.team2
-                                      ? 'bg-gradient-to-r from-purple-50 to-white border-purple-200'
-                                      : 'bg-gray-100 border-dashed border-gray-300'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5">
-                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                      match.winner === match.team2
-                                        ? 'bg-green-500'
-                                        : isFilled && match.team2
-                                        ? 'bg-purple-500'
-                                        : 'bg-gray-300'
-                                    }`}>
-                                      <span className="font-bold text-xs text-white">
-                                        2
+                                {match.team2 ? (
+                                  <TeamCard 
+                                    team={match.team2} 
+                                    size="match"
+                                    isWinner={isCompleted && match.winner === match.team2}
+                                    isLoser={isCompleted && match.winner !== match.team2 && match.winner !== null}
+                                  />
+                                ) : (
+                                  <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
+                                        <span className="text-white font-bold text-xs">2</span>
+                                      </div>
+                                      <span className="text-xs font-semibold truncate text-gray-400 italic">
+                                        —
                                       </span>
                                     </div>
-                                    <span className={`text-xs font-semibold truncate ${
-                                      match.team2
-                                        ? match.winner === match.team2
-                                          ? 'text-gray-900'
-                                          : 'text-gray-900'
-                                        : 'text-gray-400 italic'
-                                    }`}>
-                                      {match.team2?.name || '—'}
-                                    </span>
                                   </div>
-                                </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -493,6 +431,7 @@ export default function TournamentFlowPage({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </LayoutGroup>
   );
 }
