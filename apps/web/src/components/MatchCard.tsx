@@ -12,7 +12,7 @@ interface MatchCardProps {
   winner?: Team | null;
   state: 'idle' | 'ready' | 'done';
   className?: string;
-  phase?: 'match_setup' | 'swiss_rounds' | 'ko_bracket';
+  phase?: 'swiss' | 'ko';
 }
 
 export default function MatchCard({
@@ -27,7 +27,7 @@ export default function MatchCard({
   className = '',
   phase,
 }: MatchCardProps) {
-  const isMatchSetup = phase === 'match_setup';
+  const isMatchSetup = phase === 'swiss';
   const playerLayout = isMatchSetup ? 'vertical' : 'horizontal';
   const showInitials = isMatchSetup;
   const isDone = state === 'done';
@@ -37,7 +37,7 @@ export default function MatchCard({
   return (
     <motion.div
       layout
-      transition={{ type: 'spring', stiffness: 200, damping: 20, mass: 1 }}
+      transition={{ type: 'spring', stiffness: 20, damping: 15, mass: 2 }}
       className={`rounded-md p-2 pt-4 border-2 transition-all shadow-sm relative w-full min-w-[280px] ${
         isIdle
           ? 'bg-gray-50 border-gray-300 opacity-50'

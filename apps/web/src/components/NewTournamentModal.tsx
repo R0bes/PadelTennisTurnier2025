@@ -67,23 +67,25 @@ export default function NewTournamentModal({
                   />
                 </div>
                 <div className="flex gap-3 justify-end">
-                  <button
-                    type="button"
+                  <BaseButton
+                    text="Abbrechen"
                     onClick={() => {
                       onClose();
                       onNameChange('');
                     }}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="submit"
+                    color="gray"
+                    active={true}
+                    size="sm"
+                  />
+                  <BaseButton
+                    text={isLoading ? 'Erstelle...' : 'Neues Turnier starten'}
+                    onClick={onSubmit}
+                    color="orange"
+                    active={!!name.trim() && !isLoading}
                     disabled={!name.trim() || isLoading}
-                    className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isLoading ? 'Erstelle...' : 'Neues Turnier starten'}
-                  </button>
+                    type="submit"
+                    size="sm"
+                  />
                 </div>
               </form>
             </div>

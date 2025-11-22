@@ -14,6 +14,7 @@
     "@fastify/cors": "^8.4.0",
     "@prisma/client": "^5.7.1",
     "@tournament-app/shared-types": "workspace:*",
+    "@tournament-app/shared-utils": "workspace:*",
     "fastify": "^4.25.2",
     "zod": "^3.22.4"
   },

@@ -8,6 +8,27 @@ import { TournamentStateSchema, TeamSchema } from '@tournament-app/shared-types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
+async function handleErrorResponse(response: Response): Promise<never> {
+  let errorMessage = `HTTP ${response.status}`;
+  let errorDetails: any = null;
+  try {
+    const error = await response.json();
+    errorMessage = error.error || error.message || errorMessage;
+    errorDetails = error.details || error;
+  } catch {
+    // If response is not JSON, try to get text
+    try {
+      const text = await response.text();
+      errorMessage = text || errorMessage;
+    } catch {
+      // Keep default error message
+    }
+  }
+  const fullError = new Error(errorMessage);
+  (fullError as any).details = errorDetails;
+  throw fullError;
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
@@ -18,20 +39,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`;
-    try {
-      const error = await response.json();
-      errorMessage = error.error || errorMessage;
-    } catch {
-      // If response is not JSON, try to get text
-      try {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      } catch {
-        // Keep default error message
-      }
-    }
-    throw new Error(errorMessage);
+    return handleErrorResponse(response);
   }
 
   // Handle empty responses (e.g., 204 No Content)
@@ -52,17 +60,38 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   }
 }
 
+async function fetchNoContent(url: string, options?: RequestInit): Promise<void> {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    return handleErrorResponse(response);
+  }
+  // 204 No Content - no response body to parse
+}
+
 export async function createTournament(
   name: string
 ): Promise<TournamentState> {
-  const data = await fetchJson<TournamentState>(`${API_BASE_URL}/tournaments`, {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  });
+  try {
+    const data = await fetchJson<TournamentState>(`${API_BASE_URL}/tournaments`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
 
-  // Validate response
-  TournamentStateSchema.parse(data);
-  return data;
+    // Validate response
+    TournamentStateSchema.parse(data);
+    return data;
+  } catch (error) {
+    // Log detailed error for debugging
+    console.error('Error creating tournament:', error);
+    throw error;
+  }
 }
 
 export async function getTournamentState(
@@ -113,29 +142,12 @@ export async function deletePlayer(
   tournamentId: string,
   playerId: string
 ): Promise<void> {
-  const response = await fetch(
+  return fetchNoContent(
     `${API_BASE_URL}/tournaments/${tournamentId}/players/${playerId}`,
     {
       method: 'DELETE',
     }
   );
-
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`;
-    try {
-      const error = await response.json();
-      errorMessage = error.error || errorMessage;
-    } catch {
-      try {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      } catch {
-        // Keep default error message
-      }
-    }
-    throw new Error(errorMessage);
-  }
-  // 204 No Content - no response body to parse
 }
 
 export async function createTeam(
@@ -158,29 +170,12 @@ export async function deleteTeam(
   tournamentId: string,
   teamId: string
 ): Promise<void> {
-  const response = await fetch(
+  return fetchNoContent(
     `${API_BASE_URL}/tournaments/${tournamentId}/teams/${teamId}`,
     {
       method: 'DELETE',
     }
   );
-
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`;
-    try {
-      const error = await response.json();
-      errorMessage = error.error || errorMessage;
-    } catch {
-      try {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      } catch {
-        // Keep default error message
-      }
-    }
-    throw new Error(errorMessage);
-  }
-  // 204 No Content - no response body to parse
 }
 
 export async function assignPlayerToTeam(
@@ -188,61 +183,24 @@ export async function assignPlayerToTeam(
   teamId: string,
   playerId: string
 ): Promise<void> {
-  const response = await fetch(
+  return fetchNoContent(
     `${API_BASE_URL}/tournaments/${tournamentId}/teams/${teamId}/assign-player`,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ playerId }),
     }
   );
-
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`;
-    try {
-      const error = await response.json();
-      errorMessage = error.error || errorMessage;
-    } catch {
-      try {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      } catch {
-        // Keep default error message
-      }
-    }
-    throw new Error(errorMessage);
-  }
-  // 204 No Content - no response body to parse
 }
 
 export async function unassignPlayer(
   tournamentId: string,
   playerId: string
 ): Promise<void> {
-  const response = await fetch(
+  return fetchNoContent(
     `${API_BASE_URL}/tournaments/${tournamentId}/players/${playerId}/unassign`,
     {
       method: 'POST',
     }
   );
-
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`;
-    try {
-      const error = await response.json();
-      errorMessage = error.error || errorMessage;
-    } catch {
-      try {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      } catch {
-        // Keep default error message
-      }
-    }
-    throw new Error(errorMessage);
-  }
-  // 204 No Content - no response body to parse
 }
 

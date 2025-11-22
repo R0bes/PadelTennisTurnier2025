@@ -9,8 +9,12 @@ interface PlayerGhostCardProps {
 }
 
 // Generate DiceBear avatar URL based on player ID (deterministic)
-const getAvatarUrl = (playerId: string): string => {
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(playerId)}`;
+const getAvatarUrl = (player: Player): string => {
+  // Use custom avatar URL if provided, otherwise generate from player ID
+  if (player.avatarUrl) {
+    return player.avatarUrl;
+  }
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(player.id)}`;
 };
 
 // Helper function to get initials from a name in format "X. X."
@@ -34,7 +38,7 @@ export default function PlayerGhostCard({
 }: PlayerGhostCardProps) {
   const isCompact = size === 'compact';
   const isHorizontal = layout === 'horizontal';
-  const avatarUrl = getAvatarUrl(player.id);
+  const avatarUrl = getAvatarUrl(player);
   const styles = getPlayerCardStyles(isCompact, isHorizontal);
   const displayName = showInitials ? getInitials(player.name) : player.name;
 

@@ -28,7 +28,7 @@ export default function TeamCard({
     <motion.div
       layout
       layoutId={`team-${team.id}`}
-      transition={{ type: 'spring', stiffness: 200, damping: 20, mass: 1 }}
+      transition={{ type: 'spring', stiffness: 20, damping: 15, mass: 2 }}
       className={`relative ${isCompact ? 'h-full' : ''}`}
     >
       <div

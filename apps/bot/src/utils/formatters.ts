@@ -2,11 +2,11 @@ import type { TournamentState, Player, Team } from '@tournament-app/shared-types
 
 export function formatTournamentStatus(state: TournamentState): string {
   const phaseNames: Record<string, string> = {
-    registration: 'Registrierung',
-    team_setup: 'Team-Aufstellung',
-    match_setup: 'Spielplan-Erstellung',
-    swiss_rounds: 'Swiss-Runden',
-    ko_bracket: 'K.O.-Phase',
+    initial: 'Initial',
+    player: 'Registrierung',
+    team: 'Team-Aufstellung',
+    swiss: 'Swiss-Runden',
+    ko: 'K.O.-Phase',
     summary: 'Zusammenfassung',
   };
 
@@ -59,11 +59,11 @@ export function formatTeamList(teams: Team[], players: Player[]): string {
 
 export function formatPhaseList(): string {
   return `Verfügbare Phasen:
-• \`registration\` - Registrierung
-• \`team_setup\` - Team-Aufstellung
-• \`match_setup\` - Spielplan-Erstellung
-• \`swiss_rounds\` - Swiss-Runden
-• \`ko_bracket\` - K.O.-Phase
+• \`initial\` - Initial
+• \`player\` - Registrierung
+• \`team\` - Team-Aufstellung
+• \`swiss\` - Swiss-Runden
+• \`ko\` - K.O.-Phase
 • \`summary\` - Zusammenfassung`;
 }
 

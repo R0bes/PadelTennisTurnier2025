@@ -17,21 +17,22 @@ const fastify = Fastify({
 
 // Register CORS
 await fastify.register(cors, {
-  origin: true,
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  credentials: true,
 });
 
-// Phase transition validation
-const allowedTransitions: Record<Phase, Phase[]> = {
-  registration: ['team_setup'],
-  team_setup: ['match_setup', 'swiss_rounds'],
-  match_setup: ['swiss_rounds'],
-  swiss_rounds: ['ko_bracket'],
-  ko_bracket: ['summary'],
-  summary: [], // No transitions from summary
+// Phase transition validation - simple chain validation
+const phaseChain: Record<Phase, Phase | null> = {
+  initial: 'player',
+  player: 'team',
+  team: 'swiss',
+  swiss: 'ko',
+  ko: 'summary',
+  summary: null, // No transitions from summary
 };
 
 function isValidTransition(currentPhase: Phase, targetPhase: Phase): boolean {
-  return allowedTransitions[currentPhase]?.includes(targetPhase) ?? false;
+  return phaseChain[currentPhase] === targetPhase;
 }
 
 // Health check
@@ -39,13 +40,37 @@ fastify.get('/health', async () => {
   return { status: 'ok' };
 });
 
+// Helper function to sanitize and validate names
+function sanitizeName(name: string): string {
+  return name.trim().replace(/[<>]/g, '');
+}
+
+function validateName(name: string, maxLength: number = 100): { valid: boolean; error?: string; sanitized?: string } {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Name is required' };
+  }
+  
+  const sanitized = sanitizeName(name);
+  
+  if (sanitized.length === 0) {
+    return { valid: false, error: 'Name cannot be empty' };
+  }
+  
+  if (sanitized.length > maxLength) {
+    return { valid: false, error: `Name must be less than ${maxLength} characters` };
+  }
+  
+  return { valid: true, sanitized };
+}
+
 // Create tournament
 fastify.post<{ Body: { name: string } }>('/tournaments', async (request, reply) => {
   try {
     const { name } = request.body;
 
-    if (!name || typeof name !== 'string') {
-      return reply.code(400).send({ error: 'Name is required' });
+    const validation = validateName(name);
+    if (!validation.valid) {
+      return reply.code(400).send({ error: validation.error });
     }
 
     // First, check if phase column exists by trying to read it
@@ -53,8 +78,8 @@ fastify.post<{ Body: { name: string } }>('/tournaments', async (request, reply) 
     try {
       tournament = await prisma.tournament.create({
         data: {
-          name,
-          phase: 'registration',
+          name: validation.sanitized!,
+          phase: 'initial',
         },
         include: {
           players: true,
@@ -66,7 +91,7 @@ fastify.post<{ Body: { name: string } }>('/tournaments', async (request, reply) 
         fastify.log.warn('Phase column not found, creating without phase field');
         tournament = await prisma.tournament.create({
           data: {
-            name,
+            name: validation.sanitized!,
           },
           include: {
             players: true,
@@ -90,36 +115,75 @@ fastify.post<{ Body: { name: string } }>('/tournaments', async (request, reply) 
       },
     });
 
+    if (!tournamentWithTeams) {
+      return reply.code(500).send({ 
+        error: 'Internal Server Error',
+        message: 'Failed to fetch tournament after creation'
+      });
+    }
+
     const result = {
-      id: tournamentWithTeams!.id,
-      name: tournamentWithTeams!.name,
-      phase: (tournamentWithTeams!.phase || 'registration') as Phase,
-      createdAt: tournamentWithTeams!.createdAt.toISOString(),
-      players: tournamentWithTeams!.players.map((player) => ({
+      id: tournamentWithTeams.id,
+      name: tournamentWithTeams.name,
+      phase: (tournamentWithTeams.phase || 'initial') as Phase,
+      createdAt: tournamentWithTeams.createdAt.toISOString(),
+      players: tournamentWithTeams.players.map((player) => ({
         id: player.id,
         name: player.name,
         teamId: player.teamId || null,
-        telegramUsername: player.telegramUsername || null,
+        telegramUsername: (player as any).telegramUsername || null,
+        avatarUrl: (player as any).avatarUrl || null,
       })),
-      teams: tournamentWithTeams!.teams.map((team) => ({
+      teams: tournamentWithTeams.teams.length > 0 
+        ? tournamentWithTeams.teams.map((team) => ({
         id: team.id,
         name: team.name,
         tournamentId: team.tournamentId,
         playerIds: team.players.map((p) => p.id),
         createdAt: team.createdAt.toISOString(),
-      })),
+          }))
+        : [],
       rounds: [],
     };
 
     // Validate with shared schema
+    try {
     TournamentStateSchema.parse(result);
+    } catch (validationError) {
+      const errorMessage = validationError instanceof Error ? validationError.message : 'Unknown error';
+      const zodError = validationError as any;
+      const zodIssues = zodError?.issues ? JSON.stringify(zodError.issues, null, 2) : '';
+      fastify.log.error(`Schema validation error: ${errorMessage}`);
+      fastify.log.error(`Zod issues: ${zodIssues}`);
+      fastify.log.error(`Result being validated: ${JSON.stringify(result, null, 2)}`);
+      // Also log to console for easier debugging
+      console.error('=== SCHEMA VALIDATION ERROR ===');
+      console.error('Error:', errorMessage);
+      console.error('Zod Issues:', zodIssues);
+      console.error('Result:', JSON.stringify(result, null, 2));
+      return reply.code(500).send({ 
+        error: 'Internal Server Error',
+        message: `Schema validation failed: ${errorMessage}`,
+        details: zodIssues ? JSON.parse(zodIssues) : null
+      });
+    }
 
     return result;
   } catch (error) {
-    fastify.log.error(error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    fastify.log.error(`Error creating tournament: ${errorMessage}`);
+    if (errorStack) {
+      fastify.log.error(`Stack trace: ${errorStack}`);
+    }
+    // Also log to console for easier debugging
+    console.error('=== TOURNAMENT CREATION ERROR ===');
+    console.error('Error:', errorMessage);
+    console.error('Stack:', errorStack);
+    console.error('Full error:', error);
     return reply.code(500).send({ 
       error: 'Internal Server Error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: errorMessage
     });
   }
 });
@@ -150,7 +214,8 @@ fastify.get<{ Params: { id: string } }>(
           id: player.id,
           name: player.name,
           teamId: player.teamId || null,
-          telegramUsername: player.telegramUsername || null,
+          telegramUsername: (player as any).telegramUsername || null,
+        avatarUrl: (player as any).avatarUrl || null,
         })),
     };
 
@@ -189,13 +254,14 @@ fastify.get('/tournaments/active', async (request, reply) => {
     const result = {
       id: tournament.id,
       name: tournament.name,
-      phase: (tournament.phase || 'registration') as Phase,
+      phase: (tournament.phase || 'initial') as Phase,
       createdAt: tournament.createdAt.toISOString(),
       players: tournament.players.map((player) => ({
         id: player.id,
         name: player.name,
         teamId: player.teamId || null,
-        telegramUsername: player.telegramUsername || null,
+          telegramUsername: (player as any).telegramUsername || null,
+        avatarUrl: (player as any).avatarUrl || null,
       })),
       teams: tournament.teams.map((team) => ({
         id: team.id,
@@ -248,13 +314,14 @@ fastify.get<{ Params: { id: string } }>(
       const result = {
         id: tournament.id,
         name: tournament.name,
-        phase: (tournament.phase || 'registration') as Phase,
+        phase: (tournament.phase || 'initial') as Phase,
         createdAt: tournament.createdAt.toISOString(),
         players: tournament.players.map((player) => ({
           id: player.id,
           name: player.name,
           teamId: player.teamId || null,
-          telegramUsername: player.telegramUsername || null,
+          telegramUsername: (player as any).telegramUsername || null,
+        avatarUrl: (player as any).avatarUrl || null,
         })),
         teams: tournament.teams.map((team) => ({
           id: team.id,
@@ -342,7 +409,8 @@ fastify.post<{ Params: { id: string }; Body: { phase: Phase } }>(
         id: player.id,
         name: player.name,
         teamId: player.teamId || null,
-        telegramUsername: player.telegramUsername || null,
+        telegramUsername: (player as any).telegramUsername || null,
+        avatarUrl: (player as any).avatarUrl || null,
       })),
       teams: updated.teams.map((team) => ({
         id: team.id,
@@ -369,8 +437,9 @@ fastify.post<{ Params: { id: string }; Body: { name: string } }>(
       const { id } = request.params;
       const { name } = request.body;
 
-      if (!name || typeof name !== 'string') {
-        return reply.code(400).send({ error: 'Name is required' });
+      const validation = validateName(name);
+      if (!validation.valid) {
+        return reply.code(400).send({ error: validation.error });
       }
 
       // Check if tournament exists
@@ -384,7 +453,7 @@ fastify.post<{ Params: { id: string }; Body: { name: string } }>(
 
       const player = await prisma.player.create({
         data: {
-          name,
+          name: validation.sanitized!,
           tournamentId: id,
         },
       });
@@ -463,8 +532,9 @@ fastify.post<{ Params: { id: string }; Body: { name: string } }>(
       const { id } = request.params;
       const { name } = request.body;
 
-      if (!name || typeof name !== 'string') {
-        return reply.code(400).send({ error: 'Team name is required' });
+      const validation = validateName(name);
+      if (!validation.valid) {
+        return reply.code(400).send({ error: validation.error || 'Team name is required' });
       }
 
       // Check if tournament exists
@@ -478,7 +548,7 @@ fastify.post<{ Params: { id: string }; Body: { name: string } }>(
 
       const team = await prisma.team.create({
         data: {
-          name,
+          name: validation.sanitized!,
           tournamentId: id,
         },
         include: {
@@ -947,14 +1017,15 @@ fastify.post<{
     // Update player with telegram username
     const updated = await prisma.player.update({
       where: { id: playerId },
-      data: { telegramUsername: normalizedUsername },
+      data: { telegramUsername: normalizedUsername } as any,
     });
 
     const result = {
       id: updated.id,
       name: updated.name,
       teamId: updated.teamId || null,
-      telegramUsername: updated.telegramUsername || null,
+      telegramUsername: (updated as any).telegramUsername || null,
+      avatarUrl: (updated as any).avatarUrl || null,
     };
 
     PlayerSchema.parse(result);
@@ -967,6 +1038,214 @@ fastify.post<{
     });
   }
 });
+
+// Set player avatar URL
+fastify.post<{
+  Params: { id: string; playerId: string };
+  Body: { avatarUrl: string };
+}>('/tournaments/:id/players/:playerId/avatar', async (request, reply) => {
+  try {
+    const { id, playerId } = request.params;
+    const { avatarUrl } = request.body;
+
+    if (!avatarUrl || typeof avatarUrl !== 'string') {
+      return reply.code(400).send({ error: 'Avatar URL is required' });
+    }
+
+    // Validate URL format
+    try {
+      new URL(avatarUrl);
+    } catch {
+      return reply.code(400).send({ error: 'Invalid URL format' });
+    }
+
+    // Check if tournament exists
+    const tournament = await prisma.tournament.findUnique({
+      where: { id },
+    });
+
+    if (!tournament) {
+      return reply.code(404).send({ error: 'Tournament not found' });
+    }
+
+    // Check if player exists and belongs to tournament
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+    });
+
+    if (!player) {
+      return reply.code(404).send({ error: 'Player not found' });
+    }
+
+    if (player.tournamentId !== id) {
+      return reply.code(400).send({
+        error: 'Player does not belong to this tournament',
+      });
+    }
+
+    // Update player with avatar URL
+    const updated = await prisma.player.update({
+      where: { id: playerId },
+      data: { avatarUrl } as any,
+    });
+
+    const result = {
+      id: updated.id,
+      name: updated.name,
+      teamId: updated.teamId || null,
+      telegramUsername: (updated as any).telegramUsername || null,
+      avatarUrl: (updated as any).avatarUrl || null,
+    };
+
+    PlayerSchema.parse(result);
+    return result;
+  } catch (error) {
+    fastify.log.error(error);
+    return reply.code(500).send({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Get ready matches (matches that are ready to be played)
+fastify.get<{ Params: { id: string } }>(
+  '/tournaments/:id/ready-matches',
+  async (request, reply) => {
+    try {
+      const { id } = request.params;
+
+      const tournament = await prisma.tournament.findUnique({
+        where: { id },
+        include: {
+          players: {
+            include: {
+              team: true,
+            },
+          },
+          teams: {
+            include: {
+              players: true,
+            },
+          },
+        },
+      });
+
+      if (!tournament) {
+        return reply.code(404).send({ error: 'Tournament not found' });
+      }
+
+      // Only return ready matches during swiss or ko phases
+      if (tournament.phase !== 'swiss' && tournament.phase !== 'ko') {
+        return [];
+      }
+
+      const teams = tournament.teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        tournamentId: team.tournamentId,
+        playerIds: team.players.map((p) => p.id),
+        createdAt: team.createdAt.toISOString(),
+      }));
+
+      const readyMatches: Array<{
+        matchKey: string;
+        matchNumber: string;
+        team1: { id: string; name: string; playerIds: string[] } | null;
+        team2: { id: string; name: string; playerIds: string[] } | null;
+        phase: 'swiss' | 'ko';
+        round?: string;
+      }> = [];
+
+      if (tournament.phase === 'swiss') {
+        // Generate Swiss matches (simplified - first round only for now)
+        const numMatches = Math.ceil(teams.length / 2);
+        const seed = tournament.id;
+        const shuffledTeams = [...teams].sort((a, b) => {
+          const hashA = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + a.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const hashB = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + b.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          return hashA - hashB;
+        });
+
+        for (let i = 0; i < numMatches; i++) {
+          const team1 = shuffledTeams[i * 2] || null;
+          const team2 = shuffledTeams[i * 2 + 1] || null;
+          
+          if (team1 && team2) {
+            readyMatches.push({
+              matchKey: `swiss-1-${i + 1}`,
+              matchNumber: `${i + 1}`,
+              team1: {
+                id: team1.id,
+                name: team1.name,
+                playerIds: team1.playerIds,
+              },
+              team2: {
+                id: team2.id,
+                name: team2.name,
+                playerIds: team2.playerIds,
+              },
+              phase: 'swiss',
+              round: '1',
+            });
+          }
+        }
+      } else if (tournament.phase === 'ko') {
+        // Generate KO bracket matches (quarterfinals only for now)
+        try {
+          const sharedUtils = await import('@tournament-app/shared-utils');
+          const bracket = sharedUtils.generateKOBracket(teams);
+          
+          if (bracket && bracket.length > 0) {
+            const roundNames: Record<string, string> = {
+              'Quarterfinals': 'QF',
+              'Semifinals': 'SF',
+              'Final': 'F',
+            };
+            
+            const firstRound = bracket[0];
+            const roundShort = roundNames[firstRound.round] || firstRound.round.charAt(0);
+            const seededTeams = [...teams].slice(0, 8);
+            
+            firstRound.matches.forEach((match: { team1: typeof teams[0] | null; team2: typeof teams[0] | null }, matchIdx: number) => {
+              const team1 = seededTeams[matchIdx * 2] || null;
+              const team2 = seededTeams[matchIdx * 2 + 1] || null;
+              
+              if (team1 && team2) {
+                readyMatches.push({
+                  matchKey: `ko-${roundShort}-${matchIdx + 1}`,
+                  matchNumber: `${matchIdx + 1}`,
+                  team1: {
+                    id: team1.id,
+                    name: team1.name,
+                    playerIds: team1.playerIds,
+                  },
+                  team2: {
+                    id: team2.id,
+                    name: team2.name,
+                    playerIds: team2.playerIds,
+                  },
+                  phase: 'ko',
+                  round: firstRound.round,
+                });
+              }
+            });
+          }
+        } catch (error) {
+          fastify.log.error(error, 'Error generating KO bracket');
+        }
+      }
+
+      return readyMatches;
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+);
 
 const start = async () => {
   try {

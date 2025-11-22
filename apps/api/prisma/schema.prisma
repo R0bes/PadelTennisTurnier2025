@@ -13,7 +13,7 @@ datasource db {
 model Tournament {
   id        String   @id @default(cuid())
   name      String
-  phase     String   @default("registration")
+  phase     String   @default("initial")
   createdAt DateTime @default(now())
   players   Player[]
   teams     Team[]
@@ -23,6 +23,7 @@ model Player {
   id               String     @id @default(cuid())
   name             String
   telegramUsername String?
+  avatarUrl        String?
   tournament       Tournament @relation(fields: [tournamentId], references: [id])
   tournamentId     String
   teamId           String?

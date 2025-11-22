@@ -15,8 +15,12 @@ interface PlayerCardProps {
 }
 
 // Generate DiceBear avatar URL based on player ID (deterministic)
-const getAvatarUrl = (playerId: string): string => {
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(playerId)}`;
+const getAvatarUrl = (player: Player): string => {
+  // Use custom avatar URL if provided, otherwise generate from player ID
+  if (player.avatarUrl) {
+    return player.avatarUrl;
+  }
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(player.id)}`;
 };
 
 // Helper function to get initials from a name in format "X. X."
@@ -44,7 +48,7 @@ export default function PlayerCard({
   const isCompact = size === 'compact';
   const isHorizontal = layout === 'horizontal';
   const isDummy = player.name === 'Dummy Player';
-  const avatarUrl = isDummy ? getDummyAvatarUrl(player.id) : getAvatarUrl(player.id);
+  const avatarUrl = isDummy ? getDummyAvatarUrl(player.id) : getAvatarUrl(player);
   const styles = getPlayerCardStyles(isCompact, isHorizontal);
   const displayName = showInitials ? getInitials(player.name) : player.name;
 
@@ -52,7 +56,7 @@ export default function PlayerCard({
       <motion.div
         layout
         layoutId={`player-${player.id}`}
-        transition={{ type: 'spring', stiffness: 100, damping: 25, mass: 1.5 }}
+        transition={{ type: 'spring', stiffness: 20, damping: 15, mass: 2 }}
         className={`relative ${isCompact ? 'group' : ''}`}
       >
       <div
