@@ -79,8 +79,8 @@ export default function PlayerCard({
           />
         </div>
         <span
-          className={`text-retro-brown-900 font-retro font-bold truncate ${
-            isHorizontal ? 'flex-1 text-left' : 'w-full'
+          className={`text-retro-brown-900 font-retro font-bold ${
+            isHorizontal ? 'flex-1 text-center' : 'w-full text-center'
           } ${styles.textSize}`}
           style={{ textShadow: '0 1px 3px rgba(255,255,255,0.9)' }}
         >

@@ -105,11 +105,11 @@ export default function MatchCard({
               </div>
             ) : (
               <div className="flex-1 min-w-0 rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 flex items-center justify-center min-h-[80px]">
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-col items-center justify-center gap-1.5">
                   <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
                     <span className="text-white font-bold text-xs">1</span>
                   </div>
-                  <span className="text-xs font-semibold truncate text-gray-400 italic">
+                  <span className="text-xs font-semibold text-gray-400 italic">
                     —
                   </span>
                 </div>
@@ -142,11 +142,11 @@ export default function MatchCard({
               </div>
             ) : (
               <div className="flex-1 min-w-0 rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 flex items-center justify-center min-h-[80px]">
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-col items-center justify-center gap-1.5">
                   <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
                     <span className="text-white font-bold text-xs">2</span>
                   </div>
-                  <span className="text-xs font-semibold truncate text-gray-400 italic">
+                  <span className="text-xs font-semibold text-gray-400 italic">
                     —
                   </span>
                 </div>
@@ -210,11 +210,11 @@ export default function MatchCard({
             </div>
           ) : (
             <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 min-h-[80px] flex items-center justify-center">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-col items-center justify-center gap-1.5">
                 <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
                   <span className="text-white font-bold text-xs">1</span>
                 </div>
-                <span className="text-xs font-semibold truncate text-gray-400 italic">
+                <span className="text-xs font-semibold text-gray-400 italic">
                   —
                 </span>
               </div>
@@ -263,11 +263,11 @@ export default function MatchCard({
             </div>
           ) : (
             <div className="rounded p-1.5 border bg-gray-100 border-dashed border-gray-300 min-h-[80px] flex items-center justify-center">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-col items-center justify-center gap-1.5">
                 <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-300">
                   <span className="text-white font-bold text-xs">2</span>
                 </div>
-                <span className="text-xs font-semibold truncate text-gray-400 italic">
+                <span className="text-xs font-semibold text-gray-400 italic">
                   —
                 </span>
               </div>

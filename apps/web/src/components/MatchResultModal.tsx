@@ -82,7 +82,7 @@ export default function MatchResultModal({
                       : 'bg-gray-50 border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col items-center justify-center gap-2">
                     <span className={`font-bold text-lg ${isTeam1Winner ? 'text-green-700' : isTeam2Winner ? 'text-red-600' : 'text-gray-800'}`}>
                       {team1.name}
                     </span>
@@ -113,7 +113,7 @@ export default function MatchResultModal({
                       : 'bg-gray-50 border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col items-center justify-center gap-2">
                     <span className={`font-bold text-lg ${isTeam2Winner ? 'text-green-700' : isTeam1Winner ? 'text-red-600' : 'text-gray-800'}`}>
                       {team2.name}
                     </span>
@@ -131,6 +131,8 @@ export default function MatchResultModal({
               <button
                 onClick={handleConfirm}
                 className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all font-semibold text-lg shadow-lg flex items-center justify-center gap-2"
+                title="Ergebnis übernehmen"
+                aria-label="Ergebnis übernehmen"
               >
                 <CheckCircle2 className="w-5 h-5" />
                 Übernehmen

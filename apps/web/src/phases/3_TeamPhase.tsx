@@ -185,7 +185,7 @@ export default function TeamPhase({
     const isInSwissPhase = currentPhaseNumber === PhaseEnum.Swiss;
     
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3 justify-items-center">
           <AnimatePresence mode="popLayout">
             {tournamentState.teams.map((team: any) => {
               const teamPlayers = tournamentState.players.filter((player: any) =>

@@ -149,18 +149,18 @@ export default function LiveMatchOverlay({
                   <div className="text-2xl font-bold text-gray-800 mb-4">{team1.name}</div>
                   
                   {/* Sets for Team 1 */}
-                  <div className="space-y-3">
+                  <div className="space-y-3 w-full">
                     {team1Sets.map((setScore, setIndex) => (
-                      <div key={setIndex} className="flex flex-col items-center gap-2">
+                      <div key={setIndex} className="flex flex-col items-center gap-2 w-full">
                         <div className="text-sm font-semibold text-gray-600">Set {setIndex + 1}</div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center gap-3 w-full">
                           <button
                             onClick={() => {
                               const newSets = [...team1Sets];
                               newSets[setIndex] = Math.max(0, newSets[setIndex] - 1);
                               setTeam1Sets(newSets);
                             }}
-                            className="w-10 h-10 rounded-full bg-red-500 text-white hover:bg-red-600 flex items-center justify-center font-bold text-lg"
+                            className="w-10 h-10 rounded-full bg-red-500 text-white hover:bg-red-600 flex items-center justify-center font-bold text-lg flex-shrink-0"
                           >
                             <Minus className="w-5 h-5" />
                           </button>
@@ -173,7 +173,7 @@ export default function LiveMatchOverlay({
                               newSets[setIndex] = newSets[setIndex] + 1;
                               setTeam1Sets(newSets);
                             }}
-                            className="w-10 h-10 rounded-full bg-green-500 text-white hover:bg-green-600 flex items-center justify-center font-bold text-lg"
+                            className="w-10 h-10 rounded-full bg-green-500 text-white hover:bg-green-600 flex items-center justify-center font-bold text-lg flex-shrink-0"
                           >
                             <Plus className="w-5 h-5" />
                           </button>
@@ -203,18 +203,18 @@ export default function LiveMatchOverlay({
                   <div className="text-2xl font-bold text-gray-800 mb-4">{team2.name}</div>
                   
                   {/* Sets for Team 2 */}
-                  <div className="space-y-3">
+                  <div className="space-y-3 w-full">
                     {team2Sets.map((setScore, setIndex) => (
-                      <div key={setIndex} className="flex flex-col items-center gap-2">
+                      <div key={setIndex} className="flex flex-col items-center gap-2 w-full">
                         <div className="text-sm font-semibold text-gray-600">Set {setIndex + 1}</div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center gap-3 w-full">
                           <button
                             onClick={() => {
                               const newSets = [...team2Sets];
                               newSets[setIndex] = Math.max(0, newSets[setIndex] - 1);
                               setTeam2Sets(newSets);
                             }}
-                            className="w-10 h-10 rounded-full bg-red-500 text-white hover:bg-red-600 flex items-center justify-center font-bold text-lg"
+                            className="w-10 h-10 rounded-full bg-red-500 text-white hover:bg-red-600 flex items-center justify-center font-bold text-lg flex-shrink-0"
                           >
                             <Minus className="w-5 h-5" />
                           </button>
@@ -227,7 +227,7 @@ export default function LiveMatchOverlay({
                               newSets[setIndex] = newSets[setIndex] + 1;
                               setTeam2Sets(newSets);
                             }}
-                            className="w-10 h-10 rounded-full bg-green-500 text-white hover:bg-green-600 flex items-center justify-center font-bold text-lg"
+                            className="w-10 h-10 rounded-full bg-green-500 text-white hover:bg-green-600 flex items-center justify-center font-bold text-lg flex-shrink-0"
                           >
                             <Plus className="w-5 h-5" />
                           </button>

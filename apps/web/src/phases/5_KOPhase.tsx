@@ -222,7 +222,7 @@ export default function KOPhase({
       <LayoutGroup>
         <div className="space-y-8">
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-col items-center gap-4">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
               <Trophy className="w-5 h-5" />
               Tournament Matches

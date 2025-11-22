@@ -26,6 +26,7 @@ export default function SwissPhase({
   matchDurationMinutes = 10,
 }: SwissPhaseProps) {
   const [matchesReady, setMatchesReady] = useState(false);
+  const [activatedRounds, setActivatedRounds] = useState<Set<number>>(new Set([1])); // Round 1 is always activated
 
   // Set matchesReady when phase changes to swiss
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function SwissPhase({
       setMatchesReady(true);
     } else if (tournamentState.phase !== 'swiss') {
       setMatchesReady(false);
+      setActivatedRounds(new Set([1])); // Reset to only round 1 when leaving swiss phase
     }
   }, [tournamentState.phase, matchesReady]);
 
@@ -186,10 +188,13 @@ export default function SwissPhase({
     allRounds[1] = firstRoundMatches;
     
     // Swiss-Pairing for rounds 2 and 3
-    // Only fill rounds if previous round is complete
+    // Only fill rounds if they are activated AND previous round is complete
     for (let round = 2; round <= 3; round++) {
       const previousRound = round - 1;
       const previousRoundMatches = allRounds[previousRound];
+      
+      // Check if this round is activated
+      const isRoundActivated = activatedRounds.has(round);
       
       // Check if previous round is complete
       const previousRoundComplete = previousRoundMatches?.every((match, idx) => {
@@ -199,8 +204,8 @@ export default function SwissPhase({
         return !!(result && result.score && result.winner);
       });
       
-      // If previous round is not complete, create empty matches
-      if (!previousRoundComplete) {
+      // If round is not activated OR previous round is not complete, create empty matches
+      if (!isRoundActivated || !previousRoundComplete) {
         const emptyMatches: Array<{ team1: Team | null; team2: Team | null; score?: string; filled?: boolean; winner?: Team | null }> = [];
         for (let i = 0; i < numMatches; i++) {
           emptyMatches.push({
@@ -298,7 +303,7 @@ export default function SwissPhase({
     }
     
     return allRounds;
-  }, [teams, tournamentState, matchResults, matchesReady, teamHasDummyPlayers]);
+  }, [teams, tournamentState, matchResults, matchesReady, teamHasDummyPlayers, activatedRounds]);
 
   // Automatically save results for dummy team matches
   useEffect(() => {
@@ -637,12 +642,20 @@ export default function SwissPhase({
     
     const currentIndex = roundNumbers.indexOf(currentRoundNum);
     if (currentIndex < roundNumbers.length - 1) {
+      const nextRound = roundNumbers[currentIndex + 1];
+      
+      // Activate the next round
+      setActivatedRounds((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(nextRound);
+        return newSet;
+      });
+      
       // Trigger transition animation
       setRoundTransitionKey((prev) => prev + 1);
       
       // Small delay to allow transition to start
       setTimeout(() => {
-        const nextRound = roundNumbers[currentIndex + 1];
         toast.success(`Runde ${nextRound} kann beginnen`);
       }, 200);
     } else {
@@ -839,13 +852,14 @@ export default function SwissPhase({
                   .map(([roundNum, matches]) => {
                     const typedMatches = matches as any[];
                     const isActiveRound = currentRound === roundNum;
+                    const isRoundActivated = activatedRounds.has(Number(roundNum));
                     return (
                       <motion.div
                         key={roundNum}
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={isRoundActivated ? { opacity: 0, y: 20 } : false}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.4, delay: Number(roundNum) * 0.1 }}
+                        transition={{ duration: 0.3 }}
                         className={`rounded-xl p-5 shadow-lg transition-all ${
                           isActiveRound
                             ? 'bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 border-4 border-blue-500 ring-4 ring-blue-200'
@@ -861,7 +875,7 @@ export default function SwissPhase({
                         Round {roundNum}
                         {isActiveRound && <span className="ml-2 text-sm font-normal">(Aktive Runde)</span>}
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start justify-items-center" style={{ gridAutoRows: 'minmax(auto, 1fr)' }}>
                         {typedMatches.map((match: any, idx: number) => {
                         const matchKey = `swiss-${roundNum}-${idx + 1}`;
                         const result = matchResults[matchKey];
@@ -884,7 +898,7 @@ export default function SwissPhase({
                         const winnerTeam = result?.winner ? teams.find((t: any) => t.id === result.winner) || null : null;
 
                         return (
-                          <div key={idx} className="relative w-full h-full flex flex-col">
+                          <div key={idx} className="relative w-full flex flex-col">
                             <MatchCard
                               matchNumber={`${roundNum}-${idx + 1}`}
                               team1={match.team1}
